@@ -1,0 +1,118 @@
+package hook
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/mindfold/trellis/pkg/fsutil"
+	"github.com/mindfold/trellis/pkg/platform"
+)
+
+// Generator creates hook scripts and configuration files for a platform.
+type Generator struct {
+	Platform platform.Platform
+	Binary   string
+}
+
+// NewGenerator creates a hook generator.
+func NewGenerator(p platform.Platform, binary string) *Generator {
+	return &Generator{Platform: p, Binary: binary}
+}
+
+// GenerateAll generates all hook files for the platform.
+func (g *Generator) GenerateAll(dst string) error {
+	switch g.Platform.Class {
+	case platform.ClassPushBased:
+		return g.generatePushBased(dst)
+	case platform.ClassPullBased:
+		return g.generatePullBased(dst)
+	case platform.ClassAgentless:
+		return g.generateAgentless(dst)
+	}
+	return fmt.Errorf("unknown platform class: %s", g.Platform.Class)
+}
+
+func (g *Generator) generatePushBased(dst string) error {
+	// Generate hooks.json or equivalent config
+	return nil
+}
+
+func (g *Generator) generatePullBased(dst string) error {
+	// Generate agent definition file (e.g., .toml for Codex)
+	return g.GenerateAgentDef(dst)
+}
+
+func (g *Generator) generateAgentless(dst string) error {
+	// Generate before-dev skill markdown
+	return g.GenerateBeforeDevSkill(dst)
+}
+
+// GenerateAgentDef creates a sub-agent definition file for pull-based platforms.
+func (g *Generator) GenerateAgentDef(dst string) error {
+	if g.Platform.Class != platform.ClassPullBased {
+		return fmt.Errorf("agent defs only for pull-based platforms")
+	}
+
+	content := fmt.Sprintf(`name = "trellis-implement"
+description = "Trellis implementation sub-agent"
+
+[features]
+multi_agent = false
+
+[features.multi_agent_v2]
+enabled = false
+
+developer_instructions = """
+You are the trellis-implement sub-agent.
+Do NOT spawn another sub-agent.
+
+Active task context will be provided by the parent session.
+"""
+`)
+
+	path := filepath.Join(dst, "trellis-implement.toml")
+	return fsutil.WriteFile(path, []byte(content), 0644)
+}
+
+// GenerateBeforeDevSkill creates a before-dev skill for agentless platforms.
+func (g *Generator) GenerateBeforeDevSkill(dst string) error {
+	content := `# Trellis Before-Dev Skill
+
+Load project specs from .trellis/spec/ before starting development.
+`
+	path := filepath.Join(dst, "trellis-before-dev.md")
+	return fsutil.WriteFile(path, []byte(content), 0644)
+}
+
+// GenerateSessionStart creates a session start hook script.
+func (g *Generator) GenerateSessionStart(dst string) error {
+	script := fmt.Sprintf(`#!/bin/sh
+# Trellis session start hook for %s
+%s hook session-start
+`, g.Platform.Name, g.Binary)
+	path := filepath.Join(dst, "session-start.sh")
+	if err := fsutil.WriteFile(path, []byte(script), 0755); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GenerateInjectContext creates a context injection hook script.
+func (g *Generator) GenerateInjectContext(dst string) error {
+	script := fmt.Sprintf(`#!/bin/sh
+# Trellis context injection hook for %s
+%s hook inject-context
+`, g.Platform.Name, g.Binary)
+	path := filepath.Join(dst, "inject-context.sh")
+	return fsutil.WriteFile(path, []byte(script), 0755)
+}
+
+// GenerateInjectWorkflowState creates a workflow state injection hook script.
+func (g *Generator) GenerateInjectWorkflowState(dst string) error {
+	script := fmt.Sprintf(`#!/bin/sh
+# Trellis workflow state injection hook for %s
+%s hook inject-workflow-state
+`, g.Platform.Name, g.Binary)
+	path := filepath.Join(dst, "inject-workflow-state.sh")
+	return fsutil.WriteFile(path, []byte(script), 0755)
+}
