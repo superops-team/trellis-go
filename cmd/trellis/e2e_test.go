@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,10 +9,30 @@ import (
 	"testing"
 )
 
+var trellisBinary string
+
+func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "trellis-e2e-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create e2e temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmp)
+
+	trellisBinary = filepath.Join(tmp, "trellis-test")
+	build := exec.Command("go", "build", "-o", trellisBinary, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "build trellis e2e binary: %v\n%s", err, out)
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
+
 // runTrellis runs the trellis CLI in a temporary directory.
 func runTrellis(t *testing.T, dir string, args ...string) (string, string, error) {
 	t.Helper()
-	cmd := exec.Command("/tmp/trellis-test", append([]string{"--root", filepath.Join(dir, ".trellis")}, args...)...)
+	cmd := exec.Command(trellisBinary, append([]string{"--root", filepath.Join(dir, ".trellis")}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "HOME="+dir)
 	out, err := cmd.CombinedOutput()
@@ -22,6 +43,41 @@ func runTrellis(t *testing.T, dir string, args ...string) (string, string, error
 		stdout = ""
 	}
 	return stdout, stderr, err
+}
+
+func firstTaskDirName(t *testing.T, tasksDir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		t.Fatalf("read tasks dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() && e.Name() != "archive" {
+			return e.Name()
+		}
+	}
+	t.Fatal("task not found")
+	return ""
+}
+
+func archivedTaskDir(t *testing.T, tasksDir, taskDirName string) string {
+	t.Helper()
+	archiveDir := filepath.Join(tasksDir, "archive")
+	months, err := os.ReadDir(archiveDir)
+	if err != nil {
+		t.Fatalf("read archive dir: %v", err)
+	}
+	for _, month := range months {
+		if !month.IsDir() {
+			continue
+		}
+		candidate := filepath.Join(archiveDir, month.Name(), taskDirName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	t.Fatalf("archived task %s not found", taskDirName)
+	return ""
 }
 
 // initGitRepo initializes a git repository in the given directory.
@@ -164,17 +220,7 @@ func TestE2E_TaskLifecycle(t *testing.T) {
 
 	// 查找任务目录
 	tasksDir := filepath.Join(repo, ".trellis", "tasks")
-	entries, _ := os.ReadDir(tasksDir)
-	var taskDirName string
-	for _, e := range entries {
-		if e.IsDir() && e.Name() != "archive" {
-			taskDirName = e.Name()
-			break
-		}
-	}
-	if taskDirName == "" {
-		t.Fatal("task not found")
-	}
+	taskDirName := firstTaskDirName(t, tasksDir)
 
 	// 验证初始状态为 planning
 	taskPath := filepath.Join(tasksDir, taskDirName, "task.json")
@@ -183,11 +229,13 @@ func TestE2E_TaskLifecycle(t *testing.T) {
 		t.Error("initial status should be planning")
 	}
 
-	// 启动任务（需要直接调用内部逻辑，CLI 暂未完整实现 start）
-	// 这里验证 task.json 可被修改
-	newData := strings.Replace(string(taskData), `"status": "planning"`, `"status": "in_progress"`, 1)
-	if err := os.WriteFile(taskPath, []byte(newData), 0644); err != nil {
-		t.Fatalf("update task.json failed: %v", err)
+	// 通过 CLI 启动任务
+	stdout, stderr, err := runTrellis(t, repo, "task", "start", "refactor-api")
+	if err != nil {
+		t.Fatalf("task start failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "Started task: refactor-api") {
+		t.Errorf("expected start output, got: %s", stdout)
 	}
 
 	// 验证状态已更新
@@ -196,16 +244,15 @@ func TestE2E_TaskLifecycle(t *testing.T) {
 		t.Error("status should be updated to in_progress")
 	}
 
-	// 模拟归档：移动目录到 archive/YYYY-MM/
-	archiveDir := filepath.Join(tasksDir, "archive")
-	os.MkdirAll(archiveDir, 0755)
-	now := "2026-01"
-	monthDir := filepath.Join(archiveDir, now)
-	os.MkdirAll(monthDir, 0755)
-	destDir := filepath.Join(monthDir, taskDirName)
-	if err := os.Rename(filepath.Join(tasksDir, taskDirName), destDir); err != nil {
-		t.Fatalf("archive task failed: %v", err)
+	// 通过 CLI 归档任务
+	stdout, stderr, err = runTrellis(t, repo, "task", "archive", "refactor-api")
+	if err != nil {
+		t.Fatalf("task archive failed: %v\nstderr: %s", err, stderr)
 	}
+	if !strings.Contains(stdout, "Archived task: refactor-api") {
+		t.Errorf("expected archive output, got: %s", stdout)
+	}
+	destDir := archivedTaskDir(t, tasksDir, taskDirName)
 
 	// 验证任务已归档
 	if _, err := os.Stat(destDir); err != nil {
@@ -213,6 +260,84 @@ func TestE2E_TaskLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tasksDir, taskDirName)); !os.IsNotExist(err) {
 		t.Error("original task dir should be removed")
+	}
+	archivedTaskJSON, _ := os.ReadFile(filepath.Join(destDir, "task.json"))
+	if !strings.Contains(string(archivedTaskJSON), `"status": "completed"`) {
+		t.Error("archived task should have status 'completed'")
+	}
+}
+
+func TestE2E_TaskListExcludesArchivedTasks(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "bob"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+	for _, name := range []string{"active-task", "done-task"} {
+		if _, stderr, err := runTrellis(t, repo, "task", "create", name); err != nil {
+			t.Fatalf("task create %s failed: %v\nstderr: %s", name, err, stderr)
+		}
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "start", "done-task"); err != nil {
+		t.Fatalf("task start failed: %v\nstderr: %s", err, stderr)
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "archive", "done-task"); err != nil {
+		t.Fatalf("task archive failed: %v\nstderr: %s", err, stderr)
+	}
+
+	stdout, stderr, err := runTrellis(t, repo, "task", "list")
+	if err != nil {
+		t.Fatalf("task list failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "active-task") {
+		t.Errorf("task list should contain active task, got: %s", stdout)
+	}
+	if strings.Contains(stdout, "done-task") {
+		t.Errorf("task list should not contain archived task, got: %s", stdout)
+	}
+}
+
+func TestE2E_TaskInvalidTransitions(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "bob"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "create", "invalid-transition"); err != nil {
+		t.Fatalf("task create failed: %v\nstderr: %s", err, stderr)
+	}
+
+	_, stderr, err := runTrellis(t, repo, "task", "archive", "invalid-transition")
+	if err == nil {
+		t.Fatal("expected archiving planning task to fail")
+	}
+	if !strings.Contains(stderr, "invalid task status transition") {
+		t.Errorf("archive invalid transition error should mention invalid transition, got: %s", stderr)
+	}
+
+	tasksDir := filepath.Join(repo, ".trellis", "tasks")
+	taskDirName := firstTaskDirName(t, tasksDir)
+	taskPath := filepath.Join(tasksDir, taskDirName, "task.json")
+	taskData, err := os.ReadFile(taskPath)
+	if err != nil {
+		t.Fatalf("read task.json: %v", err)
+	}
+	completedTaskData := strings.Replace(string(taskData), `"status": "planning"`, `"status": "completed"`, 1)
+	if completedTaskData == string(taskData) {
+		t.Fatalf("task.json did not contain planning status: %s", taskData)
+	}
+	if err := os.WriteFile(taskPath, []byte(completedTaskData), 0644); err != nil {
+		t.Fatalf("write completed task.json: %v", err)
+	}
+
+	_, stderr, err = runTrellis(t, repo, "task", "start", "invalid-transition")
+	if err == nil {
+		t.Fatal("expected starting completed task to fail")
+	}
+	if !strings.Contains(stderr, "invalid task status transition") {
+		t.Errorf("start invalid transition error should mention invalid transition, got: %s", stderr)
 	}
 }
 
@@ -256,27 +381,94 @@ func TestE2E_ContextBuild(t *testing.T) {
 
 	// 创建 spec 文件
 	specDir := filepath.Join(repo, ".trellis", "spec")
-	os.MkdirAll(filepath.Join(specDir, "auth"), 0755)
+	os.MkdirAll(specDir, 0755)
 	os.WriteFile(filepath.Join(specDir, "auth.md"), []byte("# Auth Spec\nUse JWT."), 0644)
 
-	// 验证 PRD 内容
-	readPRD, _ := os.ReadFile(filepath.Join(taskDir, "prd.md"))
-	if string(readPRD) != prdContent {
-		t.Error("prd.md content mismatch")
+	// 通过 CLI 添加实现上下文
+	stdout, stderr, err := runTrellis(t, repo, "context", "add", "spec/auth.md", "--task", "user-auth", "--phase", "implement", "--required", "--description", "Auth spec")
+	if err != nil {
+		t.Fatalf("context add failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "Added context: spec/auth.md") {
+		t.Errorf("expected context add output, got: %s", stdout)
 	}
 
-	// 验证 manifest 可解析
+	// 验证 manifest 可解析且包含 CLI 写入的条目
 	manifestPath := filepath.Join(taskDir, "implement.jsonl")
 	manifestData, _ := os.ReadFile(manifestPath)
 	lines := strings.Split(strings.TrimSpace(string(manifestData)), "\n")
-	if len(lines) != 2 {
-		t.Errorf("expected 2 manifest entries, got %d", len(lines))
+	if len(lines) != 3 {
+		t.Errorf("expected 3 manifest entries, got %d", len(lines))
+	}
+	if !strings.Contains(string(manifestData), `"description":"Auth spec"`) || !strings.Contains(string(manifestData), `"required":true`) {
+		t.Errorf("manifest should contain required described entry, got: %s", manifestData)
 	}
 
-	// 验证上下文构建标记
-	// 实际 Builder 需要 spec.Loader，这里验证文件结构正确
-	if !strings.Contains(string(manifestData), `"required":true`) {
-		t.Error("manifest should contain required entry")
+	// 通过 CLI 构建上下文
+	stdout, stderr, err = runTrellis(t, repo, "context", "build", "--task", "user-auth", "--phase", "implement")
+	if err != nil {
+		t.Fatalf("context build failed: %v\nstderr: %s", err, stderr)
+	}
+	for _, want := range []string{"<!-- trellis-hook-injected -->", prdContent, "# Auth Spec\nUse JWT."} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("context build output should contain %q, got: %s", want, stdout)
+		}
+	}
+}
+
+func TestE2E_ContextBuildResearchDoesNotRequireTask(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "charlie"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+
+	stdout, stderr, err := runTrellis(t, repo, "context", "build", "--phase", "research")
+	if err != nil {
+		t.Fatalf("research context build without task failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "<!-- trellis-hook-injected -->") {
+		t.Errorf("research context build should contain injection marker, got: %s", stdout)
+	}
+	if strings.Contains(stderr, "--task is required") {
+		t.Errorf("research context build should not require --task, got stderr: %s", stderr)
+	}
+}
+
+func TestE2E_ContextAddRejectsUnsafePaths(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "frank"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "create", "user-auth"); err != nil {
+		t.Fatalf("task create failed: %v\nstderr: %s", err, stderr)
+	}
+	tasksDir := filepath.Join(repo, ".trellis", "tasks")
+	taskDirName := firstTaskDirName(t, tasksDir)
+	manifestPath := filepath.Join(tasksDir, taskDirName, "implement.jsonl")
+	before, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read implement manifest before unsafe add: %v", err)
+	}
+
+	for _, unsafePath := range []string{"../secret.txt", filepath.Join(repo, "secret.txt")} {
+		_, stderr, err := runTrellis(t, repo, "context", "add", unsafePath, "--task", "user-auth", "--phase", "implement")
+		if err == nil {
+			t.Fatalf("expected context add to reject unsafe path %q", unsafePath)
+		}
+		if !strings.Contains(stderr, "context path must be relative") && !strings.Contains(stderr, "context path cannot contain ..") {
+			t.Errorf("unsafe path error should explain rejection, got: %s", stderr)
+		}
+	}
+	after, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read implement manifest after unsafe add: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("unsafe context add should not mutate manifest; before %q, after %q", before, after)
 	}
 }
 

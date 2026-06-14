@@ -18,6 +18,7 @@ Trellis is a port of the original [TypeScript/Python Trellis](https://github.com
 
 - [Features](#features)
 - [Quick Start](#quick-start)
+- [Beginner User Guide](#beginner-user-guide)
 - [Supported Platforms](#supported-platforms)
 - [Architecture](#architecture)
 - [CLI Commands](#cli-commands)
@@ -99,6 +100,15 @@ my-project/
 └── ...
 ```
 
+## Beginner User Guide
+
+If you are new to Trellis, start with the step-by-step guide:
+
+- [English Beginner Guide](docs/USAGE.md)
+- [中文小白使用指南](docs/USAGE.zh-CN.md)
+
+The guide explains installation, initialization, task lifecycle, context manifests, troubleshooting, and includes Mermaid workflow diagrams.
+
 ## Supported Platforms
 
 | Platform | Class | Agent | Hooks |
@@ -165,7 +175,6 @@ trellis context add <file>     Add file to current context
 trellis context build          Build and output context
 
 # Maintenance
-trellis update                 Update platform configs
 trellis uninstall              Remove Trellis (use --keep-tasks to preserve)
 trellis version                Show version
 ```

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/mindfold/trellis/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/fsutil"
 )
 
 // Engine renders templates from an embedded filesystem to a destination.
@@ -63,9 +63,13 @@ func (e *Engine) Render(src, dst string, ctx RenderContext) error {
 			if err := e.copyFile(path, dstPath); err != nil {
 				return fmt.Errorf("copy %s: %w", path, err)
 			}
-		} else {
+		} else if ShouldTemplate(path) {
 			if err := e.renderFile(path, dstPath, ctx); err != nil {
 				return fmt.Errorf("render %s: %w", path, err)
+			}
+		} else {
+			if err := e.copyFile(path, dstPath); err != nil {
+				return fmt.Errorf("copy %s: %w", path, err)
 			}
 		}
 
@@ -83,7 +87,10 @@ func (e *Engine) Render(src, dst string, ctx RenderContext) error {
 
 	// Write .template-hashes.json
 	if len(hashes) > 0 {
-		hashData, _ := json.MarshalIndent(hashes, "", "  ")
+		hashData, err := json.MarshalIndent(hashes, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal hashes: %w", err)
+		}
 		hashPath := filepath.Join(dst, ".template-hashes.json")
 		if err := os.WriteFile(hashPath, hashData, 0644); err != nil {
 			return fmt.Errorf("write hashes: %w", err)
@@ -95,7 +102,7 @@ func (e *Engine) Render(src, dst string, ctx RenderContext) error {
 
 // RenderString renders a single template string.
 func (e *Engine) RenderString(tpl string, ctx RenderContext) (string, error) {
-	t, err := template.New("inline").Funcs(ctx.FuncMap()).Parse(tpl)
+	t, err := template.New("inline").Option("missingkey=error").Funcs(ctx.FuncMap()).Parse(tpl)
 	if err != nil {
 		return "", fmt.Errorf("parse template: %w", err)
 	}

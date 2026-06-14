@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/mindfold/trellis/pkg/fsutil"
-	"github.com/mindfold/trellis/pkg/platform"
+	"github.com/superops-team/trellis-go/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/platform"
 )
 
 // Generator creates hook scripts and configuration files for a platform.

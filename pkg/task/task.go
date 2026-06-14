@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mindfold/trellis/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/fsutil"
 )
 
 // Status represents the task lifecycle status.

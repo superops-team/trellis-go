@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mindfold/trellis/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/fsutil"
 )
 
 var (
@@ -113,6 +113,9 @@ func (m *Manager) Archive(taskID string) error {
 
 	task.Status = StatusCompleted
 	task.UpdatedAt = time.Now()
+	if err := task.Save(path); err != nil {
+		return err
+	}
 
 	// Move to archive
 	dir := filepath.Dir(path)
@@ -125,7 +128,7 @@ func (m *Manager) Archive(taskID string) error {
 		return fmt.Errorf("archive task: %w", err)
 	}
 
-	return task.Save(filepath.Join(archivePath, "task.json"))
+	return nil
 }
 
 // Current returns the currently active task (from .runtime/sessions/).
@@ -186,11 +189,11 @@ func (m *Manager) AddContext(taskID string, phase Phase, entry ContextEntry) err
 	manifestPath := filepath.Join(taskDir, manifestFile)
 	manifest, err := loadManifest(manifestPath)
 	if err != nil {
-		manifest = &Manifest{Version: "1.0", Entries: []ContextEntry{}}
+		return err
 	}
 
 	manifest.Entries = append(manifest.Entries, entry)
-	return manifest.save(manifestPath)
+	return manifest.Save(manifestPath)
 }
 
 // Validate checks the task directory structure for completeness.

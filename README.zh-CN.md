@@ -18,6 +18,7 @@ Trellis 是原版 [TypeScript/Python Trellis](https://github.com/mindfold-ai/Tre
 
 - [特性](#特性)
 - [快速开始](#快速开始)
+- [小白使用指南](#小白使用指南)
 - [支持的平台](#支持的平台)
 - [架构](#架构)
 - [CLI 命令](#cli-命令)
@@ -99,6 +100,15 @@ my-project/
 └── ...
 ```
 
+## 小白使用指南
+
+如果你是第一次使用 Trellis，建议先阅读完整的分步指南：
+
+- [中文小白使用指南](docs/USAGE.zh-CN.md)
+- [English Beginner Guide](docs/USAGE.md)
+
+指南包含安装、初始化、任务生命周期、上下文清单、常见问题，以及 Mermaid 流程图。
+
 ## 支持的平台
 
 | 平台 | 类别 | 智能体 | 钩子 |
@@ -165,7 +175,6 @@ trellis context add <file>     添加文件到当前上下文
 trellis context build          构建并输出上下文
 
 # 维护
-trellis update                 更新平台配置
 trellis uninstall              移除 Trellis（使用 --keep-tasks 保留任务）
 trellis version                显示版本
 ```

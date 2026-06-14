@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mindfold/trellis/pkg/config"
-	"github.com/mindfold/trellis/pkg/fsutil"
-	"github.com/mindfold/trellis/pkg/platform"
 	"github.com/spf13/cobra"
+	"github.com/superops-team/trellis-go/pkg/config"
+	"github.com/superops-team/trellis-go/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/platform"
 )
 
 var initOpts struct {
@@ -31,18 +31,18 @@ func newInitCmd() *cobra.Command {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	paths, err := resolveCommandPaths()
 	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
+		return err
 	}
 
 	// Verify we're in a Git repository
-	gitDir := filepath.Join(cwd, ".git")
+	gitDir := filepath.Join(paths.RepoRoot, ".git")
 	if _, err := os.Stat(gitDir); err != nil {
 		return fmt.Errorf("not a git repository; run 'git init' first")
 	}
 
-	trellisDir := filepath.Join(cwd, ".trellis")
+	trellisDir := paths.TrellisDir
 	if _, err := os.Stat(trellisDir); err == nil {
 		return fmt.Errorf("trellis already initialized at %s", trellisDir)
 	}
@@ -134,7 +134,7 @@ Archive the task and update journals.
 
 	// Create platform configs (placeholder)
 	for _, p := range platforms {
-		platformDir := filepath.Join(cwd, p.ConfigDir)
+		platformDir := filepath.Join(paths.RepoRoot, p.ConfigDir)
 		if err := fsutil.EnsureDir(platformDir); err != nil {
 			return err
 		}

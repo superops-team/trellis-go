@@ -3,6 +3,7 @@ package task
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -81,6 +82,14 @@ func TestManager_Archive(t *testing.T) {
 	if len(entries) == 0 {
 		t.Error("task should be archived")
 	}
+
+	archivedTask, err := LoadTask(filepath.Join(archiveDir, entries[0].Name(), task.DirName(), "task.json"))
+	if err != nil {
+		t.Fatalf("load archived task: %v", err)
+	}
+	if archivedTask.Status != StatusCompleted {
+		t.Errorf("archived task status = %s, want %s", archivedTask.Status, StatusCompleted)
+	}
 }
 
 func TestManager_List(t *testing.T) {
@@ -126,5 +135,86 @@ func TestManager_AddContext(t *testing.T) {
 	}
 	if len(manifest.Entries) != 1 {
 		t.Errorf("expected 1 entry, got %d", len(manifest.Entries))
+	}
+}
+
+func TestManager_AddContext_MalformedManifestReturnsError(t *testing.T) {
+	tmp := t.TempDir()
+	mgr := NewManager(tmp)
+
+	task, _, _ := mgr.Create("add-auth", CreateOptions{})
+	manifestPath := filepath.Join(tmp, task.DirName(), "implement.jsonl")
+	if err := os.WriteFile(manifestPath, []byte("{not-json\n"), 0644); err != nil {
+		t.Fatalf("write malformed manifest: %v", err)
+	}
+
+	err := mgr.AddContext(task.ID, PhaseImplement, ContextEntry{Path: "spec/auth.md", Required: true})
+	if err == nil {
+		t.Fatal("expected malformed manifest error")
+	}
+	if !strings.Contains(err.Error(), manifestPath) {
+		t.Fatalf("error should mention manifest path %q, got %v", manifestPath, err)
+	}
+
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	if string(data) != "{not-json\n" {
+		t.Fatalf("malformed manifest should not be overwritten, got %q", data)
+	}
+}
+
+func TestManager_ReadsExistingTaskAndManifestFixtures(t *testing.T) {
+	tmp := t.TempDir()
+	taskDir := filepath.Join(tmp, "03-04-legacy-task")
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
+		t.Fatalf("create legacy task dir: %v", err)
+	}
+	taskJSON := `{
+  "id": "legacy-task",
+  "name": "legacy-task",
+  "status": "planning",
+  "assignee": "alice",
+  "branch": "feature/legacy-task",
+  "subtasks": [],
+  "created_at": "2026-03-04T05:06:07Z",
+  "updated_at": "2026-03-04T05:06:07Z"
+}`
+	if err := os.WriteFile(filepath.Join(taskDir, "task.json"), []byte(taskJSON), 0644); err != nil {
+		t.Fatalf("write legacy task.json: %v", err)
+	}
+	manifestContent := `{"path":"spec/auth.md","description":"Auth spec","required":true}` + "\n"
+	if err := os.WriteFile(filepath.Join(taskDir, "implement.jsonl"), []byte(manifestContent), 0644); err != nil {
+		t.Fatalf("write legacy implement.jsonl: %v", err)
+	}
+
+	mgr := NewManager(tmp)
+	task, err := mgr.Get("legacy-task")
+	if err != nil {
+		t.Fatalf("manager should load existing task.json fixture: %v", err)
+	}
+	if task.Status != StatusPlanning || task.Assignee != "alice" {
+		t.Fatalf("loaded task mismatch: %+v", task)
+	}
+
+	manifestPath := filepath.Join(taskDir, "implement.jsonl")
+	manifest, err := loadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("legacy implement.jsonl should load: %v", err)
+	}
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Path != "spec/auth.md" || !manifest.Entries[0].Required {
+		t.Fatalf("legacy manifest entry mismatch: %+v", manifest.Entries)
+	}
+
+	if err := mgr.AddContext("legacy-task", PhaseImplement, ContextEntry{Path: "spec/api.md", Description: "API spec"}); err != nil {
+		t.Fatalf("AddContext should append to existing manifest fixture: %v", err)
+	}
+	reloaded, err := loadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("reload appended manifest: %v", err)
+	}
+	if len(reloaded.Entries) != 2 {
+		t.Fatalf("expected appended legacy manifest to contain 2 entries, got %d", len(reloaded.Entries))
 	}
 }

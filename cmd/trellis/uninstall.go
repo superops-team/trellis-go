@@ -23,12 +23,12 @@ func newUninstallCmd() *cobra.Command {
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	paths, err := resolveCommandPaths()
 	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
+		return err
 	}
 
-	trellisDir := filepath.Join(cwd, ".trellis")
+	trellisDir := paths.TrellisDir
 	if _, err := os.Stat(trellisDir); os.IsNotExist(err) {
 		return fmt.Errorf("trellis is not initialized in this repository")
 	}

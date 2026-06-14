@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
 
-	"github.com/mindfold/trellis/pkg/fsutil"
 	"github.com/spf13/cobra"
+	trellistask "github.com/superops-team/trellis-go/pkg/task"
 )
 
 func newTaskCmd() *cobra.Command {
@@ -35,44 +32,14 @@ func newTaskCreateCmd() *cobra.Command {
 }
 
 func runTaskCreate(cmd *cobra.Command, args []string) error {
-	cwd, _ := os.Getwd()
-	tasksDir := filepath.Join(cwd, ".trellis", "tasks")
-	if err := fsutil.EnsureDir(tasksDir); err != nil {
+	paths, err := resolveCommandPaths()
+	if err != nil {
 		return err
 	}
 
-	name := args[0]
-	now := time.Now()
-	taskDir := filepath.Join(tasksDir, fmt.Sprintf("%02d-%02d-%s", now.Month(), now.Day(), name))
-	if err := fsutil.EnsureDir(taskDir); err != nil {
-		return err
-	}
-
-	taskJSON := filepath.Join(taskDir, "task.json")
-	taskData := fmt.Sprintf(`{
-  "id": "%s",
-  "name": "%s",
-  "status": "planning",
-  "assignee": "",
-  "branch": "",
-  "subtasks": [],
-  "created_at": "%s",
-  "updated_at": "%s"
-}
-`, name, name, now.Format(time.RFC3339), now.Format(time.RFC3339))
-	if err := os.WriteFile(taskJSON, []byte(taskData), 0644); err != nil {
-		return err
-	}
-
-	// Create empty files
-	for _, f := range []string{"prd.md", "implement.jsonl", "check.jsonl"} {
-		path := filepath.Join(taskDir, f)
-		if err := os.WriteFile(path, []byte{}, 0644); err != nil {
-			return err
-		}
-	}
-	researchDir := filepath.Join(taskDir, "research")
-	if err := fsutil.EnsureDir(researchDir); err != nil {
+	mgr := trellistask.NewManager(paths.TasksDir)
+	_, taskDir, err := mgr.Create(args[0], trellistask.CreateOptions{})
+	if err != nil {
 		return err
 	}
 
@@ -84,13 +51,21 @@ func newTaskStartCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "start [id]",
 		Short: "Start a task (move from planning to in_progress)",
+		Args:  cobra.ExactArgs(1),
 		RunE:  runTaskStart,
 	}
 }
 
 func runTaskStart(cmd *cobra.Command, args []string) error {
-	// TODO: implement proper task lookup and status transition
-	fmt.Println("Task start not yet fully implemented")
+	paths, err := resolveCommandPaths()
+	if err != nil {
+		return err
+	}
+	mgr := trellistask.NewManager(paths.TasksDir)
+	if err := mgr.Start(args[0]); err != nil {
+		return err
+	}
+	fmt.Printf("Started task: %s\n", args[0])
 	return nil
 }
 
@@ -98,13 +73,21 @@ func newTaskArchiveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "archive [id]",
 		Short: "Archive a completed task",
+		Args:  cobra.ExactArgs(1),
 		RunE:  runTaskArchive,
 	}
 }
 
 func runTaskArchive(cmd *cobra.Command, args []string) error {
-	// TODO: implement archive logic
-	fmt.Println("Task archive not yet fully implemented")
+	paths, err := resolveCommandPaths()
+	if err != nil {
+		return err
+	}
+	mgr := trellistask.NewManager(paths.TasksDir)
+	if err := mgr.Archive(args[0]); err != nil {
+		return err
+	}
+	fmt.Printf("Archived task: %s\n", args[0])
 	return nil
 }
 
@@ -117,16 +100,17 @@ func newTaskListCmd() *cobra.Command {
 }
 
 func runTaskList(cmd *cobra.Command, args []string) error {
-	cwd, _ := os.Getwd()
-	tasksDir := filepath.Join(cwd, ".trellis", "tasks")
-	entries, err := os.ReadDir(tasksDir)
+	paths, err := resolveCommandPaths()
 	if err != nil {
-		return fmt.Errorf("read tasks: %w", err)
+		return err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() != "archive" {
-			fmt.Println(entry.Name())
-		}
+	mgr := trellistask.NewManager(paths.TasksDir)
+	tasks, err := mgr.List()
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		fmt.Println(task.ID)
 	}
 	return nil
 }

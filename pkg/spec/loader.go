@@ -48,7 +48,7 @@ func (l *Loader) Index() (*Index, error) {
 
 		layers, err := os.ReadDir(pkgDir)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read package %s: %w", pkgName, err)
 		}
 		for _, layer := range layers {
 			if !layer.IsDir() {
@@ -91,7 +91,7 @@ func (l *Loader) LoadPackage(pkg string) (map[string]string, error) {
 		indexPath := filepath.Join(pkgDir, entry.Name(), "index.md")
 		data, err := os.ReadFile(indexPath)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read package %s layer %s: %w", pkg, entry.Name(), err)
 		}
 		result[entry.Name()] = string(data)
 	}

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mindfold/trellis/pkg/spec"
+	"github.com/superops-team/trellis-go/pkg/spec"
 )
 
 const injectMarker = "<!-- trellis-hook-injected -->"
