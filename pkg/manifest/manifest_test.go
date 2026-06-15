@@ -89,3 +89,20 @@ func TestManifestSaveMethod(t *testing.T) {
 		t.Fatalf("loaded entries = %#v", loaded.Entries)
 	}
 }
+
+func TestLoadSupportsLongJSONLLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "manifest.jsonl")
+	longDescription := strings.Repeat("a", 70*1024)
+	content := `{"path":"spec/auth.md","description":"` + longDescription + `","required":true}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write long manifest: %v", err)
+	}
+
+	manifest, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load should support long JSONL lines: %v", err)
+	}
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Description != longDescription {
+		t.Fatalf("long manifest entry mismatch")
+	}
+}

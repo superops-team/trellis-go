@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/superops-team/trellis-go/pkg/config"
 	"github.com/superops-team/trellis-go/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/hook"
 	"github.com/superops-team/trellis-go/pkg/platform"
 )
 
@@ -138,8 +139,10 @@ Archive the task and update journals.
 		if err := fsutil.EnsureDir(platformDir); err != nil {
 			return err
 		}
-		// TODO: render actual platform templates
-		_ = platformDir
+		generator := hook.NewGenerator(p, os.Args[0])
+		if err := generator.GenerateAll(platformDir); err != nil {
+			return fmt.Errorf("generate platform hooks for %s: %w", p.ID, err)
+		}
 	}
 
 	if verbose {

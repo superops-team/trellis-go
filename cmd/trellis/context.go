@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -91,6 +91,20 @@ func runContextBuild(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	phase, err := buildPhase(contextOpts.phase)
+	if err != nil {
+		return err
+	}
+	output, err := buildContextOutput(paths, contextOpts.taskID, phase)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(output)
+	return nil
+}
+
+func buildContextOutput(paths resolvedPaths, taskID string, phase trellistask.Phase) (string, error) {
 
 	builder := &trelliscontext.Builder{
 		SpecLoader: spec.NewLoader(paths.SpecDir),
@@ -98,42 +112,48 @@ func runContextBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	var output string
-	switch contextOpts.phase {
-	case "implement":
-		if contextOpts.taskID == "" {
-			return fmt.Errorf("--task is required for implement context")
+	var err error
+	switch phase {
+	case trellistask.PhaseImplement:
+		if taskID == "" {
+			return "", fmt.Errorf("--task is required for implement context")
 		}
-		taskDir, err := taskDirForID(paths.TasksDir, contextOpts.taskID)
+		taskDir, err := taskDirForID(paths.TasksDir, taskID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		output, err = builder.BuildImplementContext(taskDir)
 		if err != nil {
-			return err
+			return "", contextBuildError(taskID, err)
 		}
-	case "check":
-		if contextOpts.taskID == "" {
-			return fmt.Errorf("--task is required for check context")
+	case trellistask.PhaseCheck:
+		if taskID == "" {
+			return "", fmt.Errorf("--task is required for check context")
 		}
-		taskDir, err := taskDirForID(paths.TasksDir, contextOpts.taskID)
+		taskDir, err := taskDirForID(paths.TasksDir, taskID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		output, err = builder.BuildCheckContext(taskDir)
 		if err != nil {
-			return err
+			return "", contextBuildError(taskID, err)
 		}
-	case "research":
+	case trellistask.PhaseResearch:
 		output, err = builder.BuildResearchContext()
 		if err != nil {
-			return err
+			return "", err
 		}
 	default:
-		return fmt.Errorf("unknown phase: %s", contextOpts.phase)
+		return "", fmt.Errorf("unknown phase: %s", phase)
 	}
+	return output, nil
+}
 
-	fmt.Println(output)
-	return nil
+func contextBuildError(taskID string, err error) error {
+	if errors.Is(err, trelliscontext.ErrPRDRequired) {
+		return fmt.Errorf("PRD is required for task %s", taskID)
+	}
+	return err
 }
 
 func taskPhase(phase string) (trellistask.Phase, error) {
@@ -147,28 +167,38 @@ func taskPhase(phase string) (trellistask.Phase, error) {
 	}
 }
 
-func validateContextPath(path string) (string, error) {
-	if filepath.IsAbs(path) {
-		return "", fmt.Errorf("context path must be relative: %s", path)
+func buildPhase(phase string) (trellistask.Phase, error) {
+	switch phase {
+	case string(trellistask.PhaseImplement):
+		return trellistask.PhaseImplement, nil
+	case string(trellistask.PhaseCheck):
+		return trellistask.PhaseCheck, nil
+	case string(trellistask.PhaseResearch):
+		return trellistask.PhaseResearch, nil
+	default:
+		return "", fmt.Errorf("unknown phase: %s", phase)
 	}
-	cleaned := filepath.Clean(path)
-	if cleaned == "." || cleaned == "" {
+}
+
+func validateContextPath(rawPath string) (string, error) {
+	cleaned, err := trelliscontext.NormalizeEntryPath(rawPath)
+	if err == nil {
+		return cleaned, nil
+	}
+	errText := err.Error()
+	switch {
+	case strings.Contains(errText, "must be relative"):
+		return "", fmt.Errorf("context path must be relative: %s", rawPath)
+	case strings.Contains(errText, "path is required"):
 		return "", fmt.Errorf("context path is required")
+	case strings.Contains(errText, "cannot contain .."):
+		return "", fmt.Errorf("context path cannot contain ..: %s", rawPath)
+	default:
+		return "", err
 	}
-	parts := strings.Split(cleaned, string(filepath.Separator))
-	for _, part := range parts {
-		if part == ".." {
-			return "", fmt.Errorf("context path cannot contain ..: %s", path)
-		}
-	}
-	return filepath.ToSlash(cleaned), nil
 }
 
 func taskDirForID(tasksDir, taskID string) (string, error) {
 	mgr := trellistask.NewManager(tasksDir)
-	task, err := mgr.Get(taskID)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(tasksDir, task.DirName()), nil
+	return mgr.GetDir(taskID)
 }

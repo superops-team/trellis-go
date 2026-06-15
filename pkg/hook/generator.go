@@ -3,6 +3,7 @@ package hook
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/superops-team/trellis-go/pkg/fsutil"
 	"github.com/superops-team/trellis-go/pkg/platform"
@@ -33,8 +34,13 @@ func (g *Generator) GenerateAll(dst string) error {
 }
 
 func (g *Generator) generatePushBased(dst string) error {
-	// Generate hooks.json or equivalent config
-	return nil
+	if err := g.GenerateSessionStart(dst); err != nil {
+		return err
+	}
+	if err := g.GenerateInjectContext(dst); err != nil {
+		return err
+	}
+	return g.GenerateInjectWorkflowState(dst)
 }
 
 func (g *Generator) generatePullBased(dst string) error {
@@ -86,33 +92,34 @@ Load project specs from .trellis/spec/ before starting development.
 
 // GenerateSessionStart creates a session start hook script.
 func (g *Generator) GenerateSessionStart(dst string) error {
-	script := fmt.Sprintf(`#!/bin/sh
-# Trellis session start hook for %s
-%s hook session-start
-`, g.Platform.Name, g.Binary)
-	path := filepath.Join(dst, "session-start.sh")
-	if err := fsutil.WriteFile(path, []byte(script), 0755); err != nil {
-		return err
-	}
-	return nil
+	return g.generateHookScript(dst, "session-start.sh", "session start", "session-start")
 }
 
 // GenerateInjectContext creates a context injection hook script.
 func (g *Generator) GenerateInjectContext(dst string) error {
-	script := fmt.Sprintf(`#!/bin/sh
-# Trellis context injection hook for %s
-%s hook inject-context
-`, g.Platform.Name, g.Binary)
-	path := filepath.Join(dst, "inject-context.sh")
-	return fsutil.WriteFile(path, []byte(script), 0755)
+	return g.generateHookScript(dst, "inject-context.sh", "context injection", "inject-context")
 }
 
 // GenerateInjectWorkflowState creates a workflow state injection hook script.
 func (g *Generator) GenerateInjectWorkflowState(dst string) error {
+	return g.generateHookScript(dst, "inject-workflow-state.sh", "workflow state injection", "inject-workflow-state")
+}
+
+func (g *Generator) generateHookScript(dst, fileName, description, subcommand string) error {
 	script := fmt.Sprintf(`#!/bin/sh
-# Trellis workflow state injection hook for %s
-%s hook inject-workflow-state
-`, g.Platform.Name, g.Binary)
-	path := filepath.Join(dst, "inject-workflow-state.sh")
+# Trellis %s hook for %s
+exec %s hook %s "$@"
+`, description, g.Platform.Name, shellQuote(g.Binary), subcommand)
+	path := filepath.Join(dst, fileName)
 	return fsutil.WriteFile(path, []byte(script), 0755)
+}
+
+func shellQuote(word string) string {
+	if word == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(word, " \t\n'\"\\$`!*?[]{}();<>|&") {
+		return word
+	}
+	return "'" + strings.ReplaceAll(word, "'", "'\"'\"'") + "'"
 }

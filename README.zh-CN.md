@@ -167,12 +167,13 @@ trellis init [flags]
 trellis task create <name>     创建新任务
 trellis task list              列出所有任务
 trellis task current           显示当前活跃任务
-trellis task start [id]        启动任务
-trellis task archive [id]      归档已完成任务
+trellis task start <id>        启动任务
+trellis task archive <id>      归档已完成任务
 
 # 上下文管理
-trellis context add <file>     添加文件到当前上下文
-trellis context build          构建并输出上下文
+trellis context add <file> --task <id> [--phase implement|check]
+trellis context build --task <id> --phase implement|check
+trellis context build --phase research
 
 # 维护
 trellis uninstall              移除 Trellis（使用 --keep-tasks 保留任务）

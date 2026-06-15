@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-//go:embed testdata/hello.txt testdata/literal.raw testdata/data.bin
+//go:embed testdata/hello.txt testdata/literal.raw testdata/data.bin testdata/nested/child.txt
 var testFS embed.FS
 
 //go:embed testdata/unknown/*
@@ -88,6 +88,17 @@ func TestRender_Dir(t *testing.T) {
 	}
 
 	_ = dst
+}
+
+func TestRender_NestedDirUsesSlashPathsForEmbeddedFS(t *testing.T) {
+	dst := t.TempDir()
+	eng := NewEngine(testFS, "testdata")
+
+	if err := eng.Render("nested", dst, RenderContext{Developer: "alice"}); err != nil {
+		t.Fatalf("Render nested failed: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "child.txt"), "Nested alice\n")
 }
 
 func TestRender_UnknownTemplateKeyReturnsError(t *testing.T) {

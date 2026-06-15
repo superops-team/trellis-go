@@ -80,6 +80,15 @@ func archivedTaskDir(t *testing.T, tasksDir, taskDirName string) string {
 	return ""
 }
 
+func taskDirByID(t *testing.T, tasksDir, taskID string) string {
+	t.Helper()
+	taskDir, err := taskDirForID(tasksDir, taskID)
+	if err != nil {
+		t.Fatalf("find task dir %s: %v", taskID, err)
+	}
+	return taskDir
+}
+
 // initGitRepo initializes a git repository in the given directory.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
@@ -126,6 +135,24 @@ func TestE2E_InitNewProject(t *testing.T) {
 		path := filepath.Join(trellisDir, f)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("missing required path: %s", f)
+		}
+	}
+
+	for _, f := range []string{"session-start.sh", "inject-context.sh", "inject-workflow-state.sh"} {
+		path := filepath.Join(repo, ".claude", f)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("missing generated hook file %s: %v", f, err)
+		}
+		if !strings.Contains(string(data), "hook ") {
+			t.Fatalf("generated hook file %s should call trellis hook command, got: %s", f, data)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat generated hook file %s: %v", f, err)
+		}
+		if info.Mode().Perm() != 0755 {
+			t.Fatalf("generated hook file %s mode = %v, want 0755", f, info.Mode().Perm())
 		}
 	}
 
@@ -228,6 +255,9 @@ func TestE2E_TaskLifecycle(t *testing.T) {
 	if !strings.Contains(string(taskData), `"status": "planning"`) {
 		t.Error("initial status should be planning")
 	}
+	if err := os.WriteFile(filepath.Join(tasksDir, taskDirName, "prd.md"), []byte("# PRD\nRefactor API."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
 
 	// 通过 CLI 启动任务
 	stdout, stderr, err := runTrellis(t, repo, "task", "start", "refactor-api")
@@ -278,6 +308,10 @@ func TestE2E_TaskListExcludesArchivedTasks(t *testing.T) {
 		if _, stderr, err := runTrellis(t, repo, "task", "create", name); err != nil {
 			t.Fatalf("task create %s failed: %v\nstderr: %s", name, err, stderr)
 		}
+	}
+	doneTaskDir := taskDirByID(t, filepath.Join(repo, ".trellis", "tasks"), "done-task")
+	if err := os.WriteFile(filepath.Join(doneTaskDir, "prd.md"), []byte("# PRD\nFinish task."), 0644); err != nil {
+		t.Fatalf("write done-task prd: %v", err)
 	}
 	if _, stderr, err := runTrellis(t, repo, "task", "start", "done-task"); err != nil {
 		t.Fatalf("task start failed: %v\nstderr: %s", err, stderr)
@@ -361,14 +395,7 @@ func TestE2E_ContextBuild(t *testing.T) {
 
 	// 写入 PRD
 	tasksDir := filepath.Join(repo, ".trellis", "tasks")
-	entries, _ := os.ReadDir(tasksDir)
-	var taskDir string
-	for _, e := range entries {
-		if e.IsDir() && e.Name() != "archive" {
-			taskDir = filepath.Join(tasksDir, e.Name())
-			break
-		}
-	}
+	taskDir := taskDirByID(t, tasksDir, "user-auth")
 
 	prdContent := "# PRD: User Authentication\n\nImplement JWT-based auth."
 	os.WriteFile(filepath.Join(taskDir, "prd.md"), []byte(prdContent), 0644)
@@ -414,6 +441,16 @@ func TestE2E_ContextBuild(t *testing.T) {
 			t.Errorf("context build output should contain %q, got: %s", want, stdout)
 		}
 	}
+
+	stdout, stderr, err = runTrellis(t, repo, "hook", "inject-context", "--task", "user-auth", "--phase", "implement")
+	if err != nil {
+		t.Fatalf("hook inject-context failed: %v\nstderr: %s", err, stderr)
+	}
+	for _, want := range []string{"<!-- trellis-hook-injected -->", prdContent, "# Auth Spec\nUse JWT."} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("hook inject-context output should contain %q, got: %s", want, stdout)
+		}
+	}
 }
 
 func TestE2E_ContextBuildResearchDoesNotRequireTask(t *testing.T) {
@@ -433,6 +470,70 @@ func TestE2E_ContextBuildResearchDoesNotRequireTask(t *testing.T) {
 	}
 	if strings.Contains(stderr, "--task is required") {
 		t.Errorf("research context build should not require --task, got stderr: %s", stderr)
+	}
+}
+
+func TestE2E_TaskStartRequiresPRD(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "goalie"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "create", "user-auth"); err != nil {
+		t.Fatalf("task create failed: %v\nstderr: %s", err, stderr)
+	}
+
+	_, stderr, err := runTrellis(t, repo, "task", "start", "user-auth")
+	if err == nil {
+		t.Fatal("expected task start to fail when PRD is blank")
+	}
+	if !strings.Contains(stderr, "PRD is required") {
+		t.Fatalf("blank PRD error should explain requirement, got: %s", stderr)
+	}
+
+	taskDir := taskDirByID(t, filepath.Join(repo, ".trellis", "tasks"), "user-auth")
+	if err := os.WriteFile(filepath.Join(taskDir, "prd.md"), []byte("# PRD\nImplement auth."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
+
+	stdout, stderr, err := runTrellis(t, repo, "task", "start", "user-auth")
+	if err != nil {
+		t.Fatalf("task start after PRD failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "Started task: user-auth") {
+		t.Fatalf("task start output mismatch, got: %s", stdout)
+	}
+}
+
+func TestE2E_TaskStartRequiresExistingPRD(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	if _, stderr, err := runTrellis(t, repo, "init", "--developer", "goalie"); err != nil {
+		t.Fatalf("init failed: %v\nstderr: %s", err, stderr)
+	}
+	if _, stderr, err := runTrellis(t, repo, "task", "create", "user-auth"); err != nil {
+		t.Fatalf("task create failed: %v\nstderr: %s", err, stderr)
+	}
+	taskDir := taskDirByID(t, filepath.Join(repo, ".trellis", "tasks"), "user-auth")
+	if err := os.Remove(filepath.Join(taskDir, "prd.md")); err != nil {
+		t.Fatalf("remove prd: %v", err)
+	}
+
+	_, stderr, err := runTrellis(t, repo, "task", "start", "user-auth")
+	if err == nil {
+		t.Fatal("expected task start to fail when PRD file is missing")
+	}
+	if !strings.Contains(stderr, "PRD is required") {
+		t.Fatalf("missing PRD error should explain requirement, got: %s", stderr)
+	}
+	taskData, err := os.ReadFile(filepath.Join(taskDir, "task.json"))
+	if err != nil {
+		t.Fatalf("read task.json: %v", err)
+	}
+	if !strings.Contains(string(taskData), `"status": "planning"`) {
+		t.Fatalf("rejected start should keep planning status, got: %s", taskData)
 	}
 }
 

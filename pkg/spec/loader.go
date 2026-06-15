@@ -29,16 +29,20 @@ func (l *Loader) Index() (*Index, error) {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			if entry.Name() == "guides" {
-				guidesDir := filepath.Join(l.Root, entry.Name())
-				guides, _ := os.ReadDir(guidesDir)
-				for _, g := range guides {
-					if !g.IsDir() {
-						idx.Guides = append(idx.Guides, filepath.Join("guides", g.Name()))
-					}
+		if entry.IsDir() && entry.Name() == "guides" {
+			guidesDir := filepath.Join(l.Root, entry.Name())
+			guides, err := os.ReadDir(guidesDir)
+			if err != nil {
+				return nil, fmt.Errorf("read guides: %w", err)
+			}
+			for _, g := range guides {
+				if !g.IsDir() {
+					idx.Guides = append(idx.Guides, filepath.Join("guides", g.Name()))
 				}
 			}
+			continue
+		}
+		if !entry.IsDir() {
 			continue
 		}
 
@@ -91,6 +95,9 @@ func (l *Loader) LoadPackage(pkg string) (map[string]string, error) {
 		indexPath := filepath.Join(pkgDir, entry.Name(), "index.md")
 		data, err := os.ReadFile(indexPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return nil, fmt.Errorf("read package %s layer %s: %w", pkg, entry.Name(), err)
 		}
 		result[entry.Name()] = string(data)

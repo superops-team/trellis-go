@@ -49,7 +49,7 @@ func runTaskCreate(cmd *cobra.Command, args []string) error {
 
 func newTaskStartCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "start [id]",
+		Use:   "start <id>",
 		Short: "Start a task (move from planning to in_progress)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTaskStart,
@@ -71,7 +71,7 @@ func runTaskStart(cmd *cobra.Command, args []string) error {
 
 func newTaskArchiveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "archive [id]",
+		Use:   "archive <id>",
 		Short: "Archive a completed task",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTaskArchive,

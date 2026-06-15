@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
+	trelliscontext "github.com/superops-team/trellis-go/pkg/context"
 	"github.com/superops-team/trellis-go/pkg/fsutil"
 )
 
 var (
 	ErrInvalidTransition = errors.New("invalid task status transition")
 	ErrTaskNotFound      = errors.New("task not found")
+	validTaskName        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 )
 
 // Phase represents the context phase for adding entries.
@@ -44,6 +48,10 @@ func NewManager(root string) *Manager {
 
 // Create creates a new task and returns the task and its directory path.
 func (m *Manager) Create(name string, opts CreateOptions) (*Task, string, error) {
+	if err := validateTaskName(name); err != nil {
+		return nil, "", err
+	}
+
 	now := time.Now()
 	task := &Task{
 		ID:        name,
@@ -87,6 +95,13 @@ func (m *Manager) Create(name string, opts CreateOptions) (*Task, string, error)
 	return task, taskDir, nil
 }
 
+func validateTaskName(name string) error {
+	if name == "" || strings.TrimSpace(name) != name || !validTaskName.MatchString(name) {
+		return fmt.Errorf("invalid task name %q: use letters, numbers, dot, underscore, or hyphen; path separators are not allowed", name)
+	}
+	return nil
+}
+
 // Start transitions a task from planning to in_progress.
 func (m *Manager) Start(taskID string) error {
 	task, path, err := m.findTask(taskID)
@@ -95,6 +110,9 @@ func (m *Manager) Start(taskID string) error {
 	}
 	if task.Status != StatusPlanning {
 		return fmt.Errorf("%w: cannot start task with status %s", ErrInvalidTransition, task.Status)
+	}
+	if err := requireTaskPRD(filepath.Dir(path), taskID); err != nil {
+		return err
 	}
 	task.Status = StatusInProgress
 	task.UpdatedAt = time.Now()
@@ -111,21 +129,25 @@ func (m *Manager) Archive(taskID string) error {
 		return fmt.Errorf("%w: cannot archive task with status %s", ErrInvalidTransition, task.Status)
 	}
 
-	task.Status = StatusCompleted
-	task.UpdatedAt = time.Now()
-	if err := task.Save(path); err != nil {
-		return err
-	}
-
-	// Move to archive
 	dir := filepath.Dir(path)
-	archiveDir := filepath.Join(m.root, "archive", task.UpdatedAt.Format("2006-01"))
+	completedAt := time.Now()
+	archiveDir := filepath.Join(m.root, "archive", completedAt.Format("2006-01"))
 	if err := fsutil.EnsureDir(archiveDir); err != nil {
 		return err
 	}
 	archivePath := filepath.Join(archiveDir, filepath.Base(dir))
+	if _, err := os.Stat(archivePath); err == nil {
+		return fmt.Errorf("archive task: destination already exists: %s", archivePath)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("archive task: stat destination: %w", err)
+	}
 	if err := os.Rename(dir, archivePath); err != nil {
 		return fmt.Errorf("archive task: %w", err)
+	}
+	task.Status = StatusCompleted
+	task.UpdatedAt = completedAt
+	if err := task.Save(filepath.Join(archivePath, "task.json")); err != nil {
+		return fmt.Errorf("save archived task metadata: %w", err)
 	}
 
 	return nil
@@ -167,6 +189,11 @@ func (m *Manager) List() ([]Task, error) {
 func (m *Manager) Get(taskID string) (*Task, error) {
 	task, _, err := m.findTask(taskID)
 	return task, err
+}
+
+// GetDir returns the on-disk directory for a task ID.
+func (m *Manager) GetDir(taskID string) (string, error) {
+	return m.findTaskDir(taskID)
 }
 
 // AddContext adds a context entry to the task's manifest.
@@ -233,6 +260,20 @@ func (m *Manager) findTaskDir(taskID string) (string, error) {
 	}
 
 	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "archive" || !strings.HasSuffix(entry.Name(), "-"+taskID) {
+			continue
+		}
+		path := filepath.Join(m.root, entry.Name(), "task.json")
+		task, err := LoadTask(path)
+		if err != nil {
+			continue
+		}
+		if task.ID == taskID {
+			return filepath.Join(m.root, entry.Name()), nil
+		}
+	}
+
+	for _, entry := range entries {
 		if !entry.IsDir() || entry.Name() == "archive" {
 			continue
 		}
@@ -247,4 +288,15 @@ func (m *Manager) findTaskDir(taskID string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
+}
+
+func requireTaskPRD(taskDir, taskID string) error {
+	_, err := trelliscontext.LoadRequiredPRD(taskDir)
+	if errors.Is(err, trelliscontext.ErrPRDRequired) {
+		return fmt.Errorf("PRD is required for task %s", taskID)
+	}
+	if err != nil {
+		return fmt.Errorf("read PRD for task %s: %w", taskID, err)
+	}
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestManager_Create(t *testing.T) {
@@ -31,11 +32,53 @@ func TestManager_Create(t *testing.T) {
 	}
 }
 
+func TestManager_CreateRejectsUnsafeTaskNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		taskName string
+	}{
+		{name: "empty", taskName: ""},
+		{name: "slash path", taskName: "feature/auth"},
+		{name: "backslash path", taskName: `feature\auth`},
+		{name: "dot", taskName: "."},
+		{name: "dot dot", taskName: ".."},
+		{name: "parent traversal", taskName: "../secret"},
+		{name: "trimmed whitespace", taskName: " user-auth "},
+		{name: "control character", taskName: "user\nauth"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			mgr := NewManager(tmp)
+
+			_, _, err := mgr.Create(tt.taskName, CreateOptions{})
+			if err == nil {
+				t.Fatalf("expected unsafe task name %q to be rejected", tt.taskName)
+			}
+			if !strings.Contains(err.Error(), "invalid task name") {
+				t.Fatalf("error should mention invalid task name, got: %v", err)
+			}
+
+			entries, err := os.ReadDir(tmp)
+			if err != nil {
+				t.Fatalf("read task root: %v", err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("invalid create should not leave task directories, got %d entries", len(entries))
+			}
+		})
+	}
+}
+
 func TestManager_Start(t *testing.T) {
 	tmp := t.TempDir()
 	mgr := NewManager(tmp)
 
-	task, _, _ := mgr.Create("add-auth", CreateOptions{})
+	task, dir, _ := mgr.Create("add-auth", CreateOptions{})
+	if err := os.WriteFile(filepath.Join(dir, "prd.md"), []byte("# PRD\nBuild auth."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
 	if err := mgr.Start(task.ID); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
@@ -46,11 +89,70 @@ func TestManager_Start(t *testing.T) {
 	}
 }
 
+func TestManager_StartRequiresNonEmptyPRD(t *testing.T) {
+	tmp := t.TempDir()
+	mgr := NewManager(tmp)
+
+	task, dir, err := mgr.Create("add-auth", CreateOptions{})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "prd.md"), []byte(" \n\t"), 0644); err != nil {
+		t.Fatalf("write blank prd: %v", err)
+	}
+
+	err = mgr.Start(task.ID)
+	if err == nil {
+		t.Fatal("expected blank PRD to block task start")
+	}
+	if !strings.Contains(err.Error(), "PRD is required") {
+		t.Fatalf("error should explain PRD requirement, got: %v", err)
+	}
+	loaded, err := mgr.Get(task.ID)
+	if err != nil {
+		t.Fatalf("load task after rejected start: %v", err)
+	}
+	if loaded.Status != StatusPlanning {
+		t.Fatalf("rejected start should keep status %s, got %s", StatusPlanning, loaded.Status)
+	}
+}
+
+func TestManager_StartRequiresExistingPRD(t *testing.T) {
+	tmp := t.TempDir()
+	mgr := NewManager(tmp)
+
+	task, dir, err := mgr.Create("add-auth", CreateOptions{})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, "prd.md")); err != nil {
+		t.Fatalf("remove prd: %v", err)
+	}
+
+	err = mgr.Start(task.ID)
+	if err == nil {
+		t.Fatal("expected missing PRD to block task start")
+	}
+	if !strings.Contains(err.Error(), "PRD is required") {
+		t.Fatalf("error should explain PRD requirement, got: %v", err)
+	}
+	loaded, err := mgr.Get(task.ID)
+	if err != nil {
+		t.Fatalf("load task after rejected start: %v", err)
+	}
+	if loaded.Status != StatusPlanning {
+		t.Fatalf("rejected start should keep status %s, got %s", StatusPlanning, loaded.Status)
+	}
+}
+
 func TestManager_Start_InvalidTransition(t *testing.T) {
 	tmp := t.TempDir()
 	mgr := NewManager(tmp)
 
-	task, _, _ := mgr.Create("add-auth", CreateOptions{})
+	task, dir, _ := mgr.Create("add-auth", CreateOptions{})
+	if err := os.WriteFile(filepath.Join(dir, "prd.md"), []byte("# PRD\nBuild auth."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
 	mgr.Start(task.ID)
 	mgr.Archive(task.ID)
 
@@ -65,6 +167,9 @@ func TestManager_Archive(t *testing.T) {
 	mgr := NewManager(tmp)
 
 	task, dir, _ := mgr.Create("add-auth", CreateOptions{})
+	if err := os.WriteFile(filepath.Join(dir, "prd.md"), []byte("# PRD\nBuild auth."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
 	mgr.Start(task.ID)
 
 	if err := mgr.Archive(task.ID); err != nil {
@@ -89,6 +194,41 @@ func TestManager_Archive(t *testing.T) {
 	}
 	if archivedTask.Status != StatusCompleted {
 		t.Errorf("archived task status = %s, want %s", archivedTask.Status, StatusCompleted)
+	}
+}
+
+func TestManager_ArchiveRenameFailureKeepsTaskInProgress(t *testing.T) {
+	tmp := t.TempDir()
+	mgr := NewManager(tmp)
+
+	task, dir, err := mgr.Create("add-auth", CreateOptions{})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "prd.md"), []byte("# PRD\nBuild auth."), 0644); err != nil {
+		t.Fatalf("write prd: %v", err)
+	}
+	if err := mgr.Start(task.ID); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	archivePath := filepath.Join(tmp, "archive", time.Now().Format("2006-01"), task.DirName())
+	if err := os.MkdirAll(archivePath, 0755); err != nil {
+		t.Fatalf("create archive path blocker: %v", err)
+	}
+
+	err = mgr.Archive(task.ID)
+	if err == nil {
+		t.Fatal("expected archive to fail when destination already exists")
+	}
+	if _, statErr := os.Stat(dir); statErr != nil {
+		t.Fatalf("original task dir should remain after failed archive: %v", statErr)
+	}
+	loaded, err := LoadTask(filepath.Join(dir, "task.json"))
+	if err != nil {
+		t.Fatalf("load task after failed archive: %v", err)
+	}
+	if loaded.Status != StatusInProgress {
+		t.Fatalf("failed archive should keep status %s, got %s", StatusInProgress, loaded.Status)
 	}
 }
 

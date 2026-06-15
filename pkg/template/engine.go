@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -33,21 +34,23 @@ func NewEngine(efs embed.FS, root string) *Engine {
 // Render recursively renders the template directory src to the filesystem path dst.
 func (e *Engine) Render(src, dst string, ctx RenderContext) error {
 	hashes := make(map[string]string)
+	srcRoot := pathpkg.Join(e.root, filepath.ToSlash(src))
 
-	err := fs.WalkDir(e.fs, filepath.Join(e.root, src), func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(e.fs, srcRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		rel, err := filepath.Rel(filepath.Join(e.root, src), path)
+		rel, err := filepath.Rel(filepath.FromSlash(srcRoot), filepath.FromSlash(path))
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
 		if rel == "." {
 			return nil
 		}
 
-		dstPath := filepath.Join(dst, rel)
+		dstPath := filepath.Join(dst, filepath.FromSlash(rel))
 
 		if d.IsDir() {
 			return fsutil.EnsureDir(dstPath)

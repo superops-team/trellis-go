@@ -167,12 +167,13 @@ trellis init [flags]
 trellis task create <name>     Create a new task
 trellis task list              List all tasks
 trellis task current           Show active task
-trellis task start [id]        Start a task
-trellis task archive [id]      Archive a completed task
+trellis task start <id>        Start a task
+trellis task archive <id>      Archive a completed task
 
 # Context management
-trellis context add <file>     Add file to current context
-trellis context build          Build and output context
+trellis context add <file> --task <id> [--phase implement|check]
+trellis context build --task <id> --phase implement|check
+trellis context build --phase research
 
 # Maintenance
 trellis uninstall              Remove Trellis (use --keep-tasks to preserve)

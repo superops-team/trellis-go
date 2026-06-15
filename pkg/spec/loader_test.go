@@ -100,12 +100,41 @@ func TestLoader_IndexIncludesPackagesAndGuides(t *testing.T) {
 	if idx.Packages["auth"].Layers["data"] != filepath.Join("auth", "data", "index.md") {
 		t.Fatalf("data layer not indexed: %+v", idx.Packages["auth"].Layers)
 	}
+	if len(idx.Guides) != 1 || idx.Guides[0] != filepath.Join("guides", "getting-started.md") {
+		t.Fatalf("guide not indexed: %+v", idx.Guides)
+	}
 
 	markdown := idx.ToMarkdown()
-	for _, want := range []string{"# Spec Index", "### auth", "**api**", "**data**"} {
+	for _, want := range []string{"# Spec Index", "### auth", "**api**", "**data**", "## Guides", "guides/getting-started.md"} {
 		if !strings.Contains(markdown, want) {
 			t.Errorf("markdown index should contain %q, got: %s", want, markdown)
 		}
+	}
+}
+
+func TestLoader_LoadPackageSkipsResourceDirectoriesWithoutIndex(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(root, "auth", "api"),
+		filepath.Join(root, "auth", "assets"),
+	} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("create dir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "auth", "api", "index.md"), []byte("# API"), 0644); err != nil {
+		t.Fatalf("write api index: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "auth", "assets", "logo.txt"), []byte("logo"), 0644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+
+	got, err := NewLoader(root).LoadPackage("auth")
+	if err != nil {
+		t.Fatalf("LoadPackage should skip resource directories without index.md: %v", err)
+	}
+	if len(got) != 1 || got["api"] != "# API" {
+		t.Fatalf("LoadPackage result mismatch: %+v", got)
 	}
 }
 

@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/superops-team/trellis-go/pkg/fsutil"
 )
+
+const maxManifestLineBytes = 1024 * 1024
 
 // Entry is a single reference in a context manifest.
 type Entry struct {
@@ -33,15 +37,16 @@ func Load(path string) (*Manifest, error) {
 
 	manifest := &Manifest{Version: "1.0", Entries: []Entry{}}
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxManifestLineBytes)
 	lineNumber := 0
 	for scanner.Scan() {
 		lineNumber++
-		line := scanner.Text()
-		if line == "" {
+		line := scanner.Bytes()
+		if len(line) == 0 {
 			continue
 		}
 		var entry Entry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		if err := json.Unmarshal(line, &entry); err != nil {
 			return nil, fmt.Errorf("parse manifest %s line %d: %w", path, lineNumber, err)
 		}
 		manifest.Entries = append(manifest.Entries, entry)
@@ -54,20 +59,17 @@ func Load(path string) (*Manifest, error) {
 
 // Save writes a manifest to a JSONL file.
 func Save(path string, manifest *Manifest) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create manifest %s: %w", path, err)
-	}
-	defer f.Close()
-
+	var data []byte
 	for _, entry := range manifest.Entries {
-		data, err := json.Marshal(entry)
+		line, err := json.Marshal(entry)
 		if err != nil {
 			return fmt.Errorf("marshal entry: %w", err)
 		}
-		if _, err := f.WriteString(string(data) + "\n"); err != nil {
-			return fmt.Errorf("write manifest %s: %w", path, err)
-		}
+		data = append(data, line...)
+		data = append(data, '\n')
+	}
+	if err := fsutil.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write manifest %s: %w", path, err)
 	}
 	return nil
 }

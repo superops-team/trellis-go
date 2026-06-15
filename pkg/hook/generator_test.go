@@ -13,19 +13,25 @@ func TestGenerator_GenerateAllDispatchesByPlatformClass(t *testing.T) {
 	tests := []struct {
 		name      string
 		class     platform.Class
-		wantFile  string
+		wantFiles []string
 		wantBytes string
 	}{
 		{
+			name:      "push based creates executable hook scripts",
+			class:     platform.ClassPushBased,
+			wantFiles: []string{"session-start.sh", "inject-context.sh", "inject-workflow-state.sh"},
+			wantBytes: "trellis hook",
+		},
+		{
 			name:      "pull based creates agent definition",
 			class:     platform.ClassPullBased,
-			wantFile:  "trellis-implement.toml",
+			wantFiles: []string{"trellis-implement.toml"},
 			wantBytes: "Do NOT spawn another sub-agent",
 		},
 		{
 			name:      "agentless creates before-dev skill",
 			class:     platform.ClassAgentless,
-			wantFile:  "trellis-before-dev.md",
+			wantFiles: []string{"trellis-before-dev.md"},
 			wantBytes: "Load project specs",
 		},
 	}
@@ -40,12 +46,24 @@ func TestGenerator_GenerateAllDispatchesByPlatformClass(t *testing.T) {
 				t.Fatalf("GenerateAll failed: %v", err)
 			}
 
-			data, err := os.ReadFile(filepath.Join(tmp, tt.wantFile))
-			if err != nil {
-				t.Fatalf("expected generated file %s: %v", tt.wantFile, err)
-			}
-			if !strings.Contains(string(data), tt.wantBytes) {
-				t.Errorf("generated file should contain %q, got: %s", tt.wantBytes, data)
+			for _, wantFile := range tt.wantFiles {
+				path := filepath.Join(tmp, wantFile)
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("expected generated file %s: %v", wantFile, err)
+				}
+				if !strings.Contains(string(data), tt.wantBytes) {
+					t.Errorf("generated file should contain %q, got: %s", tt.wantBytes, data)
+				}
+				if tt.class == platform.ClassPushBased {
+					info, err := os.Stat(path)
+					if err != nil {
+						t.Fatalf("stat generated file %s: %v", wantFile, err)
+					}
+					if info.Mode().Perm() != 0755 {
+						t.Fatalf("push hook script %s mode = %v, want 0755", wantFile, info.Mode().Perm())
+					}
+				}
 			}
 		})
 	}
@@ -94,10 +112,10 @@ func TestGenerator_GenerateAgentDef(t *testing.T) {
 		t.Fatalf("read agent def: %v", err)
 	}
 	content := string(data)
-	if !contains(content, "multi_agent = false") {
+	if !strings.Contains(content, "multi_agent = false") {
 		t.Error("agent def should disable multi_agent")
 	}
-	if !contains(content, "Do NOT spawn another sub-agent") {
+	if !strings.Contains(content, "Do NOT spawn another sub-agent") {
 		t.Error("agent def should contain anti-recursion warning")
 	}
 }
@@ -128,8 +146,27 @@ func TestGenerator_GenerateSessionStart(t *testing.T) {
 
 	path := filepath.Join(tmp, "session-start.sh")
 	data, _ := os.ReadFile(path)
-	if !contains(string(data), "trellis hook session-start") {
+	if !strings.Contains(string(data), "trellis hook session-start") {
 		t.Error("session start script should call trellis hook")
+	}
+}
+
+func TestGenerator_HookScriptQuotesBinaryAndForwardsArgs(t *testing.T) {
+	tmp := t.TempDir()
+	p := platform.Platform{ID: "claude", Name: "Claude", ConfigDir: ".claude", Class: platform.ClassPushBased}
+	g := NewGenerator(p, "/tmp/Trellis Bin/trellis")
+
+	if err := g.GenerateInjectContext(tmp); err != nil {
+		t.Fatalf("GenerateInjectContext failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, "inject-context.sh"))
+	if err != nil {
+		t.Fatalf("read generated hook script: %v", err)
+	}
+	want := "exec '/tmp/Trellis Bin/trellis' hook inject-context \"$@\""
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("hook script should quote binary and forward args with %q, got: %s", want, data)
 	}
 }
 
@@ -181,17 +218,4 @@ func TestGenerator_GenerateInjectHookScripts(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
