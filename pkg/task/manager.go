@@ -12,6 +12,7 @@ import (
 
 	trelliscontext "github.com/superops-team/trellis-go/pkg/context"
 	"github.com/superops-team/trellis-go/pkg/fsutil"
+	"github.com/superops-team/trellis-go/pkg/manifest"
 )
 
 var (
@@ -196,8 +197,88 @@ func (m *Manager) GetDir(taskID string) (string, error) {
 	return m.findTaskDir(taskID)
 }
 
-// AddContext adds a context entry to the task's manifest.
-func (m *Manager) AddContext(taskID string, phase Phase, entry ContextEntry) error {
+// Edit updates mutable fields of a task.
+func (m *Manager) Edit(taskID string, patch TaskPatch) error {
+	task, path, err := m.findTask(taskID)
+	if err != nil {
+		return err
+	}
+	if patch.Name != nil {
+		task.Name = *patch.Name
+	}
+	if patch.Assignee != nil {
+		task.Assignee = *patch.Assignee
+	}
+	if patch.Branch != nil {
+		task.Branch = *patch.Branch
+	}
+	if patch.Package != nil {
+		task.Package = *patch.Package
+	}
+	if patch.Status != nil {
+		task.Status = *patch.Status
+	}
+	task.UpdatedAt = time.Now()
+	return task.Save(path)
+}
+
+// TaskPatch holds optional fields for Edit.
+type TaskPatch struct {
+	Name     *string
+	Assignee *string
+	Branch   *string
+	Package  *string
+	Status   *Status
+}
+
+// AddSubtask adds a subtask to a task.
+func (m *Manager) AddSubtask(taskID, title string) (*Subtask, error) {
+	task, path, err := m.findTask(taskID)
+	if err != nil {
+		return nil, err
+	}
+	id := fmt.Sprintf("%d", len(task.Subtasks)+1)
+	sub := Subtask{ID: id, Title: title, Done: false}
+	task.Subtasks = append(task.Subtasks, sub)
+	task.UpdatedAt = time.Now()
+	if err := task.Save(path); err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+// DoneSubtask marks a subtask as done.
+func (m *Manager) DoneSubtask(taskID, subtaskID string) error {
+	return m.setSubtaskDone(taskID, subtaskID, true)
+}
+
+// UndoneSubtask marks a subtask as not done.
+func (m *Manager) UndoneSubtask(taskID, subtaskID string) error {
+	return m.setSubtaskDone(taskID, subtaskID, false)
+}
+
+func (m *Manager) setSubtaskDone(taskID, subtaskID string, done bool) error {
+	task, path, err := m.findTask(taskID)
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range task.Subtasks {
+		if task.Subtasks[i].ID == subtaskID {
+			task.Subtasks[i].Done = done
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("subtask %s not found in task %s", subtaskID, taskID)
+	}
+	task.UpdatedAt = time.Now()
+	return task.Save(path)
+}
+
+// AddContextEntry adds a context entry to the task's phase manifest.
+func (m *Manager) AddContextEntry(taskID string, phase Phase, entry manifest.Entry) error {
 	taskDir, err := m.findTaskDir(taskID)
 	if err != nil {
 		return err
@@ -209,18 +290,128 @@ func (m *Manager) AddContext(taskID string, phase Phase, entry ContextEntry) err
 		manifestFile = "implement.jsonl"
 	case PhaseCheck:
 		manifestFile = "check.jsonl"
+	case PhaseResearch:
+		manifestFile = "research.jsonl"
 	default:
 		return fmt.Errorf("unknown phase: %s", phase)
 	}
 
 	manifestPath := filepath.Join(taskDir, manifestFile)
-	manifest, err := loadManifest(manifestPath)
+	mfest, err := manifest.Load(manifestPath)
 	if err != nil {
 		return err
 	}
 
-	manifest.Entries = append(manifest.Entries, entry)
-	return manifest.Save(manifestPath)
+	mfest.Entries = append(mfest.Entries, entry)
+	return mfest.Save(manifestPath)
+}
+
+// RemoveContextEntry removes a context entry by path from the task's phase manifest.
+func (m *Manager) RemoveContextEntry(taskID string, phase Phase, filePath string) error {
+	taskDir, err := m.findTaskDir(taskID)
+	if err != nil {
+		return err
+	}
+
+	var manifestFile string
+	switch phase {
+	case PhaseImplement:
+		manifestFile = "implement.jsonl"
+	case PhaseCheck:
+		manifestFile = "check.jsonl"
+	case PhaseResearch:
+		manifestFile = "research.jsonl"
+	default:
+		return fmt.Errorf("unknown phase: %s", phase)
+	}
+
+	manifestPath := filepath.Join(taskDir, manifestFile)
+	mfest, err := manifest.Load(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	filtered := mfest.Entries[:0]
+	found := false
+	for _, e := range mfest.Entries {
+		if e.Path == filePath {
+			found = true
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	if !found {
+		return fmt.Errorf("context entry %q not found in %s for task %s", filePath, phase, taskID)
+	}
+	mfest.Entries = filtered
+	return mfest.Save(manifestPath)
+}
+
+// ListContextEntries returns context entries for a task's phase.
+func (m *Manager) ListContextEntries(taskID string, phase Phase) ([]manifest.Entry, error) {
+	taskDir, err := m.findTaskDir(taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	var manifestFile string
+	switch phase {
+	case PhaseImplement:
+		manifestFile = "implement.jsonl"
+	case PhaseCheck:
+		manifestFile = "check.jsonl"
+	case PhaseResearch:
+		manifestFile = "research.jsonl"
+	default:
+		return nil, fmt.Errorf("unknown phase: %s", phase)
+	}
+
+	manifestPath := filepath.Join(taskDir, manifestFile)
+	mfest, err := manifest.Load(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	return mfest.Entries, nil
+}
+
+// ListByStatus returns tasks filtered by status.
+func (m *Manager) ListByStatus(status Status) ([]Task, error) {
+	all, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+	var filtered []Task
+	for _, t := range all {
+		if t.Status == status {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered, nil
+}
+
+// AddSpec associates a spec file with a task.
+func (m *Manager) AddSpec(taskID, specPath string) error {
+	task, path, err := m.findTask(taskID)
+	if err != nil {
+		return err
+	}
+	for _, s := range task.Specs {
+		if s == specPath {
+			return nil // already present
+		}
+	}
+	task.Specs = append(task.Specs, specPath)
+	task.UpdatedAt = time.Now()
+	return task.Save(path)
+}
+
+// ListSpecs returns the associated spec paths for a task.
+func (m *Manager) ListSpecs(taskID string) ([]string, error) {
+	task, _, err := m.findTask(taskID)
+	if err != nil {
+		return nil, err
+	}
+	return task.Specs, nil
 }
 
 // Validate checks the task directory structure for completeness.

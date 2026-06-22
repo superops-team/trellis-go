@@ -264,7 +264,7 @@ func TestManager_AddContext(t *testing.T) {
 
 	task, _, _ := mgr.Create("add-auth", CreateOptions{})
 	entry := ContextEntry{Path: "spec/auth.md", Required: true}
-	if err := mgr.AddContext(task.ID, PhaseImplement, entry); err != nil {
+	if err := mgr.AddContextEntry(task.ID, PhaseImplement, entry); err != nil {
 		t.Fatalf("AddContext failed: %v", err)
 	}
 
@@ -288,7 +288,7 @@ func TestManager_AddContext_MalformedManifestReturnsError(t *testing.T) {
 		t.Fatalf("write malformed manifest: %v", err)
 	}
 
-	err := mgr.AddContext(task.ID, PhaseImplement, ContextEntry{Path: "spec/auth.md", Required: true})
+	err := mgr.AddContextEntry(task.ID, PhaseImplement, ContextEntry{Path: "spec/auth.md", Required: true})
 	if err == nil {
 		t.Fatal("expected malformed manifest error")
 	}
@@ -347,7 +347,7 @@ func TestManager_ReadsExistingTaskAndManifestFixtures(t *testing.T) {
 		t.Fatalf("legacy manifest entry mismatch: %+v", manifest.Entries)
 	}
 
-	if err := mgr.AddContext("legacy-task", PhaseImplement, ContextEntry{Path: "spec/api.md", Description: "API spec"}); err != nil {
+	if err := mgr.AddContextEntry("legacy-task", PhaseImplement, ContextEntry{Path: "spec/api.md", Description: "API spec"}); err != nil {
 		t.Fatalf("AddContext should append to existing manifest fixture: %v", err)
 	}
 	reloaded, err := loadManifest(manifestPath)

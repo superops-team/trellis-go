@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	trelliscontext "github.com/superops-team/trellis-go/pkg/context"
+	"github.com/superops-team/trellis-go/pkg/manifest"
 	"github.com/superops-team/trellis-go/pkg/spec"
 	trellistask "github.com/superops-team/trellis-go/pkg/task"
 )
@@ -74,12 +75,12 @@ func runContextAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	mgr := trellistask.NewManager(paths.TasksDir)
-	entry := trellistask.ContextEntry{
+	entry := manifest.Entry{
 		Path:        entryPath,
 		Description: contextOpts.description,
 		Required:    contextOpts.required,
 	}
-	if err := mgr.AddContext(contextOpts.taskID, phase, entry); err != nil {
+	if err := mgr.AddContextEntry(contextOpts.taskID, phase, entry); err != nil {
 		return err
 	}
 	fmt.Printf("Added context: %s\n", entryPath)
@@ -162,6 +163,8 @@ func taskPhase(phase string) (trellistask.Phase, error) {
 		return trellistask.PhaseImplement, nil
 	case "check":
 		return trellistask.PhaseCheck, nil
+	case "research":
+		return trellistask.PhaseResearch, nil
 	default:
 		return "", fmt.Errorf("unknown phase: %s", phase)
 	}

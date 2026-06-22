@@ -25,6 +25,8 @@ type Task struct {
 	Status    Status    `json:"status"`
 	Assignee  string    `json:"assignee"`
 	Branch    string    `json:"branch"`
+	Package   string    `json:"package,omitempty"`
+	Specs     []string  `json:"specs,omitempty"`
 	Subtasks  []Subtask `json:"subtasks"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
