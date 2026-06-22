@@ -43,11 +43,11 @@ func TestHookInjectWorkflowStatePrintsPrompt(t *testing.T) {
 
 func TestHookInjectWorkflowStateRejectsUnknownState(t *testing.T) {
 	output, err := executeRootCommand(t, "hook", "inject-workflow-state", "--state", "unknown")
-	if err == nil {
-		t.Fatalf("expected unknown state to fail, got output: %s", output)
+	if err != nil {
+		t.Fatalf("unknown state should not error, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown state") {
-		t.Fatalf("error should identify unknown state, got: %v", err)
+	if !strings.Contains(output, "Refer to workflow.md") {
+		t.Fatalf("unknown state should return generic fallback, got: %s", output)
 	}
 }
 

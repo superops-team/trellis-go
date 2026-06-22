@@ -87,3 +87,40 @@ func (c *Client) SafeCommit(message string, patterns []string) error {
 	}
 	return c.Commit(message)
 }
+
+// CommitInfo holds summary info for a single commit.
+type CommitInfo struct {
+	Hash    string
+	Message string
+}
+
+// RecentCommits returns the last n commit hashes and messages.
+func (c *Client) RecentCommits(n int) ([]CommitInfo, error) {
+	out, err := c.run("log", "-n", fmt.Sprintf("%d", n), "--format=%H %s")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	lines := strings.Split(out, "\n")
+	commits := make([]CommitInfo, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		ci := CommitInfo{Hash: parts[0]}
+		if len(parts) > 1 {
+			ci.Message = parts[1]
+		}
+		commits = append(commits, ci)
+	}
+	return commits, nil
+}
+
+// RemoteURL returns the origin remote URL.
+func (c *Client) RemoteURL() (string, error) {
+	return c.run("remote", "get-url", "origin")
+}

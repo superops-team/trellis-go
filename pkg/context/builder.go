@@ -2,7 +2,6 @@ package context
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/superops-team/trellis-go/pkg/prd"
 	"github.com/superops-team/trellis-go/pkg/spec"
 )
 
@@ -18,7 +18,7 @@ const (
 	maxContextEntryBytes = 256 * 1024
 )
 
-var ErrPRDRequired = errors.New("PRD is required")
+var ErrPRDRequired = prd.ErrRequired
 
 // TaskInfo holds minimal task information for context building.
 type TaskInfo struct {
@@ -37,20 +37,17 @@ func (b *Builder) BuildImplementContext(taskDir string) (string, error) {
 	var parts []string
 	parts = append(parts, injectMarker)
 
-	// Load prd.md
-	prd, err := LoadRequiredPRD(taskDir)
+	prdContent, err := prd.LoadRequired(taskDir)
 	if err != nil {
 		return "", err
 	}
-	parts = append(parts, fmt.Sprintf("=== file: prd.md ===\n%s", prd))
+	parts = append(parts, fmt.Sprintf("=== file: prd.md ===\n%s", prdContent))
 
-	// Load info.md if exists
 	infoPath := filepath.Join(taskDir, "info.md")
 	if data, err := os.ReadFile(infoPath); err == nil && len(data) > 0 {
 		parts = append(parts, fmt.Sprintf("=== file: info.md ===\n%s", data))
 	}
 
-	// Load implement.jsonl entries
 	manifestPath := filepath.Join(taskDir, "implement.jsonl")
 	manifest, err := LoadManifest(manifestPath)
 	if err != nil {
@@ -79,14 +76,12 @@ func (b *Builder) BuildCheckContext(taskDir string) (string, error) {
 	var parts []string
 	parts = append(parts, injectMarker)
 
-	// Load prd.md
-	prd, err := LoadRequiredPRD(taskDir)
+	prdContent, err := prd.LoadRequired(taskDir)
 	if err != nil {
 		return "", err
 	}
-	parts = append(parts, fmt.Sprintf("=== file: prd.md ===\n%s", prd))
+	parts = append(parts, fmt.Sprintf("=== file: prd.md ===\n%s", prdContent))
 
-	// Load check.jsonl entries
 	manifestPath := filepath.Join(taskDir, "check.jsonl")
 	manifest, err := LoadManifest(manifestPath)
 	if err != nil {
@@ -187,20 +182,6 @@ func NormalizeEntryPath(rawPath string) (string, error) {
 
 func hasWindowsVolume(path string) bool {
 	return len(path) >= 2 && path[1] == ':' && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))
-}
-
-func LoadRequiredPRD(taskDir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(taskDir, "prd.md"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", ErrPRDRequired
-		}
-		return "", fmt.Errorf("read PRD: %w", err)
-	}
-	if strings.TrimSpace(string(data)) == "" {
-		return "", ErrPRDRequired
-	}
-	return string(data), nil
 }
 
 func isBinaryContent(data []byte) bool {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	trelliscontext "github.com/superops-team/trellis-go/pkg/context"
 	"github.com/superops-team/trellis-go/pkg/fsutil"
 	"github.com/superops-team/trellis-go/pkg/manifest"
+	"github.com/superops-team/trellis-go/pkg/prd"
 )
 
 var (
@@ -156,7 +156,15 @@ func (m *Manager) Archive(taskID string) error {
 
 // Current returns the currently active task (from .runtime/sessions/).
 func (m *Manager) Current() (*Task, error) {
-	// TODO: read from .runtime/sessions/
+	all, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range all {
+		if t.Status == StatusInProgress {
+			return &t, nil
+		}
+	}
 	return nil, ErrTaskNotFound
 }
 
@@ -389,6 +397,26 @@ func (m *Manager) ListByStatus(status Status) ([]Task, error) {
 	return filtered, nil
 }
 
+// ListRecent returns the most recent n tasks by UpdatedAt.
+func (m *Manager) ListRecent(n int) ([]Task, error) {
+	all, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+	// Sort by UpdatedAt descending (simple insertion sort for small n)
+	for i := 0; i < len(all); i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].UpdatedAt.After(all[i].UpdatedAt) {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
+	}
+	if n > len(all) {
+		n = len(all)
+	}
+	return all[:n], nil
+}
+
 // AddSpec associates a spec file with a task.
 func (m *Manager) AddSpec(taskID, specPath string) error {
 	task, path, err := m.findTask(taskID)
@@ -482,8 +510,8 @@ func (m *Manager) findTaskDir(taskID string) (string, error) {
 }
 
 func requireTaskPRD(taskDir, taskID string) error {
-	_, err := trelliscontext.LoadRequiredPRD(taskDir)
-	if errors.Is(err, trelliscontext.ErrPRDRequired) {
+	_, err := prd.LoadRequired(taskDir)
+	if errors.Is(err, prd.ErrRequired) {
 		return fmt.Errorf("PRD is required for task %s", taskID)
 	}
 	if err != nil {
