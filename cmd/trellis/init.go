@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/superops-team/trellis-go/pkg/configurator"
 	"github.com/superops-team/trellis-go/pkg/config"
 	"github.com/superops-team/trellis-go/pkg/fsutil"
-	"github.com/superops-team/trellis-go/pkg/hook"
 	"github.com/superops-team/trellis-go/pkg/platform"
 )
 
@@ -223,13 +223,12 @@ Archive the task and update journals.
 
 	// Create platform configs
 	for _, p := range platforms {
-		platformDir := filepath.Join(paths.RepoRoot, p.ConfigDir)
-		if err := fsutil.EnsureDir(platformDir); err != nil {
-			return err
+		cfg := configurator.For(p, os.Args[0])
+		if cfg == nil {
+			return fmt.Errorf("no configurator for platform %s", p.ID)
 		}
-		generator := hook.NewGenerator(p, os.Args[0])
-		if err := generator.GenerateAll(platformDir); err != nil {
-			return fmt.Errorf("generate platform hooks for %s: %w", p.ID, err)
+		if err := cfg.Generate(paths.RepoRoot, configurator.Options{}); err != nil {
+			return fmt.Errorf("configure platform %s: %w", p.ID, err)
 		}
 	}
 
@@ -290,13 +289,12 @@ func addPlatforms(paths resolvedPaths) error {
 	}
 
 	for _, p := range platforms {
-		platformDir := filepath.Join(paths.RepoRoot, p.ConfigDir)
-		if err := fsutil.EnsureDir(platformDir); err != nil {
-			return err
+		cfg := configurator.For(p, os.Args[0])
+		if cfg == nil {
+			return fmt.Errorf("no configurator for platform %s", p.ID)
 		}
-		generator := hook.NewGenerator(p, os.Args[0])
-		if err := generator.GenerateAll(platformDir); err != nil {
-			return fmt.Errorf("generate platform hooks for %s: %w", p.ID, err)
+		if err := cfg.Generate(paths.RepoRoot, configurator.Options{}); err != nil {
+			return fmt.Errorf("configure platform %s: %w", p.ID, err)
 		}
 		fmt.Printf("Added platform: %s\n", p.Name)
 	}
