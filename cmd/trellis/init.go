@@ -254,6 +254,24 @@ func writeDeveloperIdentity(trellisDir, name string) error {
 	return os.WriteFile(devPath, []byte(content), 0644)
 }
 
+// readDeveloperIdentity reads the developer name from .trellis/.developer.
+func readDeveloperIdentity(trellisDir string) (string, error) {
+	devPath := filepath.Join(trellisDir, ".developer")
+	data, err := os.ReadFile(devPath)
+	if err != nil {
+		return "", err
+	}
+	// Parse "name: \"value\"" format
+	content := strings.TrimSpace(string(data))
+	if strings.HasPrefix(content, "name:") {
+		name := strings.TrimPrefix(content, "name:")
+		name = strings.TrimSpace(name)
+		name = strings.Trim(name, "\"")
+		return name, nil
+	}
+	return "", fmt.Errorf("invalid .developer format")
+}
+
 // addPlatforms adds new platforms to an existing project without overwriting.
 func addPlatforms(paths resolvedPaths) error {
 	registry := platform.NewRegistry()
