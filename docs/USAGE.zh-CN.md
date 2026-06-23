@@ -395,7 +395,75 @@ trellis context add spec/auth/api/index.md --task user-auth --phase implement
 
 如果清单条目里 `required: true`，对应文件必须存在。创建文件，或者删除该条目。
 
-## 12. 命令速查
+## 12. 高级功能
+
+### 子任务
+
+将复杂任务拆分为小步骤：
+
+```bash
+trellis task add-subtask user-auth --name "实现登录接口"
+trellis task add-subtask user-auth --name "添加 JWT 中间件"
+trellis task done-subtask user-auth --name "实现登录接口"
+trellis task info user-auth  # 查看子任务进度
+```
+
+### 会话日志
+
+记录和回顾 AI 代理会话：
+
+```bash
+# 完成工作后记录会话
+trellis hook record-session --title "实现了登录功能" --commit abc1234
+
+# 列出所有记录的会话
+trellis hook list-sessions
+
+# 按关键字搜索会话
+trellis hook list-sessions --search "登录"
+```
+
+### Spec 模板
+
+Trellis 包含常用技术栈的可复用 spec 模板：
+
+| 模板 | 技术栈 |
+|------|--------|
+| `nextjs-orpc-pg` | Next.js + oRPC + PostgreSQL |
+| `cf-workers-hono-turso` | Cloudflare Workers + Hono + Turso |
+| `electron-react-ts` | Electron + React + TypeScript |
+
+模板位于 `.trellis/templates/`，可复制到 spec 目录使用。
+
+### 技能市场
+
+社区技能扩展 AI 代理能力：
+
+| 技能 | 用途 |
+|------|------|
+| `frontend-fullchain-optimization` | Web Vitals 驱动的前端性能优化 |
+| `mem-recall` | 跨平台 AI 对话回忆 |
+| `trellis-meta` | 检查和调试 Trellis 内部状态 |
+| `trellis-spec-bootstrap` | 从现有代码库生成 spec |
+
+技能位于 `.agents/skills/`，支持平台会自动配置。
+
+### Agent Hooks
+
+Trellis 提供 AI 代理集成的 hook 命令：
+
+```bash
+# 注入上下文到代理会话
+trellis hook inject-context --task user-auth --phase implement
+
+# 注入工作流状态提示
+trellis hook inject-workflow-state
+
+# 会话开始上下文
+trellis hook session-start
+```
+
+## 13. 命令速查
 
 | 命令 | 用途 | 示例 |
 | --- | --- | --- |
@@ -405,12 +473,28 @@ trellis context add spec/auth/api/index.md --task user-auth --phase implement
 | `trellis task current` | 显示当前活跃任务占位信息。 | `trellis task current` |
 | `trellis task start <id>` | 把任务改为 `in_progress`。 | `trellis task start user-auth` |
 | `trellis task archive <id>` | 完成并归档任务。 | `trellis task archive user-auth` |
+| `trellis task add-subtask <id>` | 添加子任务。 | `trellis task add-subtask user-auth --name "登录接口"` |
+| `trellis task done-subtask <id>` | 标记子任务完成。 | `trellis task done-subtask user-auth --name "登录接口"` |
+| `trellis task info <id>` | 查看任务详情。 | `trellis task info user-auth` |
+| `trellis task add-spec <id>` | 关联 spec 到任务。 | `trellis task add-spec user-auth spec/auth.md` |
+| `trellis task list-specs <id>` | 列出关联的 spec。 | `trellis task list-specs user-auth` |
+| `trellis task add-context <file>` | 通过 task 命令添加上下文。 | `trellis task add-context spec/auth.md --task user-auth --phase implement` |
+| `trellis task list-context <id>` | 列出上下文文件。 | `trellis task list-context --task user-auth` |
+| `trellis task remove-context <file>` | 移除上下文条目。 | `trellis task remove-context spec/auth.md --task user-auth` |
+| `trellis task edit <id>` | 编辑任务字段。 | `trellis task edit user-auth --name "新名称"` |
 | `trellis context add <file>` | 添加文件到上下文清单。 | `trellis context add spec/auth.md --task user-auth --phase implement` |
 | `trellis context build` | 输出组装后的上下文。 | `trellis context build --task user-auth --phase implement` |
+| `trellis hook inject-context` | 为 agent hook 输出上下文。 | `trellis hook inject-context --task user-auth --phase implement` |
+| `trellis hook inject-workflow-state` | 输出工作流状态提示。 | `trellis hook inject-workflow-state` |
+| `trellis hook session-start` | 输出会话开始上下文。 | `trellis hook session-start` |
+| `trellis hook record-session` | 记录会话条目。 | `trellis hook record-session --title "修复 bug" --commit abc1234` |
+| `trellis hook list-sessions` | 列出记录的会话。 | `trellis hook list-sessions` |
+| `trellis update` | 同步模板和配置。 | `trellis update` |
+| `trellis upgrade` | 升级到最新版本。 | `trellis upgrade` |
 | `trellis uninstall` | 移除 Trellis 文件。 | `trellis uninstall --keep-tasks` |
 | `trellis version` | 查看版本。 | `trellis version` |
 
-## 13. 开发者补充
+## 14. 开发者补充
 
 从源码构建：
 

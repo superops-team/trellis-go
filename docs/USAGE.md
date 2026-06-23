@@ -395,7 +395,75 @@ Do not use `/absolute/path` or `../outside-file`.
 
 If a manifest entry has `required: true`, the file must exist. Create the file or remove the entry.
 
-## 12. Command Reference
+## 12. Advanced Features
+
+### Subtasks
+
+Break complex tasks into smaller pieces:
+
+```bash
+trellis task add-subtask user-auth --name "Implement login endpoint"
+trellis task add-subtask user-auth --name "Add JWT middleware"
+trellis task done-subtask user-auth --name "Implement login endpoint"
+trellis task info user-auth  # Shows subtask progress
+```
+
+### Session Journal
+
+Record and recall AI agent sessions:
+
+```bash
+# Record a session after completing work
+trellis hook record-session --title "Implemented login" --commit abc1234
+
+# List all recorded sessions
+trellis hook list-sessions
+
+# Search sessions by keyword
+trellis hook list-sessions --search "login"
+```
+
+### Spec Templates
+
+Trellis includes reusable spec templates for common tech stacks:
+
+| Template | Stack |
+|----------|-------|
+| `nextjs-orpc-pg` | Next.js + oRPC + PostgreSQL |
+| `cf-workers-hono-turso` | Cloudflare Workers + Hono + Turso |
+| `electron-react-ts` | Electron + React + TypeScript |
+
+Templates are in `.trellis/templates/` and can be copied into your spec directory.
+
+### Skills Marketplace
+
+Community skills extend AI agent capabilities:
+
+| Skill | Purpose |
+|-------|---------|
+| `frontend-fullchain-optimization` | Web Vitals-driven performance optimization |
+| `mem-recall` | Cross-platform AI conversation recall |
+| `trellis-meta` | Inspect and debug Trellis internals |
+| `trellis-spec-bootstrap` | Generate specs from existing codebases |
+
+Skills are in `.agents/skills/` and are auto-configured for supported platforms.
+
+### Agent Hooks
+
+Trellis provides hook commands for AI agent integration:
+
+```bash
+# Inject context into agent session
+trellis hook inject-context --task user-auth --phase implement
+
+# Inject workflow state prompt
+trellis hook inject-workflow-state
+
+# Session start context
+trellis hook session-start
+```
+
+## 13. Command Reference
 
 | Command | Purpose | Example |
 | --- | --- | --- |
@@ -405,12 +473,28 @@ If a manifest entry has `required: true`, the file must exist. Create the file o
 | `trellis task current` | Show current active task placeholder. | `trellis task current` |
 | `trellis task start <id>` | Move task to `in_progress`. | `trellis task start user-auth` |
 | `trellis task archive <id>` | Complete and archive task. | `trellis task archive user-auth` |
+| `trellis task add-subtask <id>` | Add a subtask. | `trellis task add-subtask user-auth --name "Login endpoint"` |
+| `trellis task done-subtask <id>` | Mark subtask as done. | `trellis task done-subtask user-auth --name "Login endpoint"` |
+| `trellis task info <id>` | Show task details. | `trellis task info user-auth` |
+| `trellis task add-spec <id>` | Associate a spec with a task. | `trellis task add-spec user-auth spec/auth.md` |
+| `trellis task list-specs <id>` | List associated specs. | `trellis task list-specs user-auth` |
+| `trellis task add-context <file>` | Add context via task command. | `trellis task add-context spec/auth.md --task user-auth --phase implement` |
+| `trellis task list-context <id>` | List context files. | `trellis task list-context --task user-auth` |
+| `trellis task remove-context <file>` | Remove context entry. | `trellis task remove-context spec/auth.md --task user-auth` |
+| `trellis task edit <id>` | Edit task fields. | `trellis task edit user-auth --name "new-name"` |
 | `trellis context add <file>` | Add a file to a context manifest. | `trellis context add spec/auth.md --task user-auth --phase implement` |
 | `trellis context build` | Print assembled context. | `trellis context build --task user-auth --phase implement` |
+| `trellis hook inject-context` | Print context for agent hook. | `trellis hook inject-context --task user-auth --phase implement` |
+| `trellis hook inject-workflow-state` | Print workflow-state prompt. | `trellis hook inject-workflow-state` |
+| `trellis hook session-start` | Print session start context. | `trellis hook session-start` |
+| `trellis hook record-session` | Record a session entry. | `trellis hook record-session --title "Fixed bug" --commit abc1234` |
+| `trellis hook list-sessions` | List recorded sessions. | `trellis hook list-sessions` |
+| `trellis update` | Sync templates and config. | `trellis update` |
+| `trellis upgrade` | Upgrade to latest version. | `trellis upgrade` |
 | `trellis uninstall` | Remove Trellis files. | `trellis uninstall --keep-tasks` |
 | `trellis version` | Print version. | `trellis version` |
 
-## 13. Developer Notes
+## 14. Developer Notes
 
 Build from source:
 

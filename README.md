@@ -12,13 +12,14 @@
 
 > An engineering framework for AI coding. Persist specs, tasks, and memory into your repo so any coding agent works to your engineering standards.
 
-Trellis is a port of the original [TypeScript/Python Trellis](https://github.com/mindfold-ai/Trellis) framework to Go, designed for single-binary distribution, high performance, and seamless integration with 15+ AI coding platforms.
+Trellis is a port of the original [TypeScript/Python Trellis](https://github.com/mindfold-ai/Trellis) framework to Go, designed for single-binary distribution, high performance, and seamless integration with 16 AI coding platforms.
 
 ## Table of Contents
 
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Beginner User Guide](#beginner-user-guide)
+- [Documentation](#documentation)
 - [Supported Platforms](#supported-platforms)
 - [Architecture](#architecture)
 - [CLI Commands](#cli-commands)
@@ -30,11 +31,17 @@ Trellis is a port of the original [TypeScript/Python Trellis](https://github.com
 
 ## Features
 
-- **15+ AI Platforms** — Built-in support for Claude, Cursor, Codex, Copilot, Windsurf, and more
+- **16 AI Platforms** — Built-in support for Claude Code, Cursor, Codex, Devin, ZCode, and more
 - **4-Phase Workflow** — Plan → Implement → Verify → Finish state machine
-- **Task Lifecycle** — Create, start, archive tasks with automatic organization
+- **Task Lifecycle** — Create, start, archive tasks with automatic organization and subtasks
 - **Context Builder** — JSONL-based manifest system for AI agent context injection
-- **Platform Hooks** — Auto-generate platform-specific configuration files
+- **Platform Hooks** — Auto-generate platform-specific configuration files (hooks, agents, skills, workflows)
+- **Session Journal** — Record and recall AI agent sessions with commit tracking
+- **Slash Commands** — Built-in `/plan`, `/implement`, `/verify`, `/finish` workflow commands
+- **Sub-Agent Support** — Define and dispatch parallel sub-agents for complex tasks
+- **Auto-Skills** — Platform-specific skill definitions for AI coding agents
+- **Spec Templates** — Reusable engineering spec templates (Next.js, Cloudflare Workers, Electron)
+- **Skills Marketplace** — Community skills for frontend optimization, memory recall, and more
 - **Atomic File Operations** — Safe concurrent writes with SHA256 hashing
 - **Single Binary** — Statically compiled Go binary with embedded templates
 - **Thread-Safe Registry** — Concurrent-safe platform and spec management
@@ -109,75 +116,137 @@ If you are new to Trellis, start with the step-by-step guide:
 
 The guide explains installation, initialization, task lifecycle, context manifests, troubleshooting, and includes Mermaid workflow diagrams.
 
+## Documentation
+
+Full documentation is available in the `docs/` directory:
+
+| Section | Description |
+|---------|-------------|
+| [Home](docs/index.md) | Overview and quick start |
+| [Installation & First Task](docs/start/install-and-first-task.md) | Setup guide |
+| [How It Works](docs/start/how-it-works.md) | Core concepts and data flow |
+| [Everyday Use](docs/start/everyday-use.md) | Daily workflow patterns |
+| [Real-World Scenarios](docs/start/real-world-scenarios.md) | Usage examples |
+| [Architecture](docs/advanced/architecture.md) | Package overview and design |
+| [Configuration](docs/advanced/configuration.md) | Config file, env vars, CLI flags |
+| [Multi-Platform](docs/advanced/multi-platform.md) | Working with multiple platforms |
+| [Roadmap](docs/advanced/roadmap.md) | Current and future plans |
+| [Document Index](docs/llms.txt) | LLM-friendly doc index |
+
 ## Supported Platforms
 
-| Platform | Class | Agent | Hooks |
-|----------|-------|-------|-------|
-| Claude Code | Push-based | Yes | Yes |
-| Cursor | Push-based | Yes | Yes |
-| Codex | Pull-based | Yes | Yes |
-| OpenCode | Push-based | Yes | Yes |
-| Gemini CLI | Pull-based | Yes | No |
-| Kiro | Push-based | Yes | Yes |
-| Copilot | Pull-based | No | No |
-| Windsurf | Agentless | No | No |
-| Kilo | Agentless | No | No |
-| Pi | Push-based | Yes | Yes |
-| CodeBuddy | Push-based | Yes | Yes |
-| Droid | Push-based | Yes | Yes |
-| Qoder | Pull-based | Yes | No |
-| Antigravity | Agentless | No | No |
-| Reasonix | Push-based | Yes | Yes |
+| Platform | Class | Agent | Hooks | Skills |
+|----------|-------|:-----:|:-----:|:------:|
+| Claude Code | Push-based | ✅ | ✅ | ✅ |
+| Cursor | Push-based | ✅ | ✅ | ✅ |
+| Codex | Pull-based | ✅ | ✅ | ✅ |
+| OpenCode | Push-based | ✅ | ✅ | ✅ |
+| Gemini CLI | Pull-based | ✅ | — | — |
+| Kiro | Push-based | ✅ | ✅ | ✅ |
+| Copilot | Pull-based | — | — | — |
+| Devin | Agentless | — | — | — |
+| Kilo | Agentless | — | — | — |
+| Pi | Push-based | ✅ | ✅ | ✅ |
+| CodeBuddy | Push-based | ✅ | ✅ | ✅ |
+| Droid | Push-based | ✅ | ✅ | ✅ |
+| Qoder | Pull-based | ✅ | — | — |
+| Antigravity | Agentless | — | — | — |
+| Reasonix | Push-based | ✅ | ✅ | ✅ |
+| ZCode | Push-based | ✅ | ✅ | ✅ |
+
+> **Note:** Devin replaces the previous Windsurf platform. `--windsurf` is retained as an alias for backward compatibility.
 
 **Platform Classes:**
 - **Push-based** — Agent initiates execution (Claude, Cursor, etc.)
 - **Pull-based** — IDE pulls context on demand (Codex, Copilot, etc.)
-- **Agentless** — No agent capability, manual workflow (Windsurf, Kilo, etc.)
+- **Agentless** — No agent capability, manual workflow (Devin, Kilo, etc.)
 
 ## Architecture
 
 ```
 cmd/trellis/          CLI commands (cobra)
 pkg/
-  platform/           Platform definitions & registry
-  fsutil/             Atomic file operations & hashing
+  agent/              AI agent management
+  command/            CLI command definitions
   config/             YAML configuration management
-  template/           embed.FS template engine
-  task/               Task lifecycle & manifest
-  workflow/           4-phase state machine
+  configurator/       Platform config generation
   context/            Context builder (JSONL manifests)
-  hook/               Platform hook generator
-  spec/               Spec loader & index
+  fsutil/             Atomic file operations & hashing
   git/                Git command wrapper
+  hook/               Platform hook execution
+  manifest/           Manifest file management
+  platform/           Platform definitions & registry (16 platforms)
+  prd/                PRD management
+  session/            Session journal
+  skill/              Skill management
+  spec/               Spec loader & index
+  task/               Task lifecycle & subtasks
+  template/           embed.FS template engine
+  update/             Template sync
+  upgrade/            Binary upgrade
+  workflow/           4-phase state machine
 internal/
   embed/              Embedded template assets
   testutil/           Test helpers
 ```
 
+See [docs/advanced/architecture.md](docs/advanced/architecture.md) for detailed design documentation.
+
 ## CLI Commands
 
+### Initialization
+
 ```bash
-# Initialize Trellis in current repo
 trellis init [flags]
   --developer, -u    Developer name
   --platform, -p     Platform to configure (repeatable)
-  --all              Configure all platforms
+  --all              Configure all 16 platforms
+```
 
-# Task management
-trellis task create <name>     Create a new task
-trellis task list              List all tasks
-trellis task current           Show active task
-trellis task start <id>        Start a task
-trellis task archive <id>      Archive a completed task
+### Task Management
 
-# Context management
+```bash
+trellis task create <name>       Create a new task
+trellis task list                List all tasks
+trellis task current             Show active task
+trellis task info <id>           Show task details
+trellis task start <id>          Start a task (planning → in_progress)
+trellis task archive <id>        Archive a completed task
+trellis task edit <id>           Edit task fields
+trellis task add-subtask <id>    Add a subtask
+trellis task done-subtask <id>   Mark a subtask as done
+trellis task add-spec <id>       Associate a spec with a task
+trellis task list-specs <id>     List associated specs
+```
+
+### Context Management
+
+```bash
 trellis context add <file> --task <id> [--phase implement|check]
 trellis context build --task <id> --phase implement|check
 trellis context build --phase research
+trellis task add-context <file> --task <id> [--phase implement|check]
+trellis task list-context --task <id>
+trellis task remove-context <file> --task <id>
+```
 
-# Maintenance
-trellis uninstall              Remove Trellis (use --keep-tasks to preserve)
-trellis version                Show version
+### Agent Hooks
+
+```bash
+trellis hook inject-context           Print context for agent hook
+trellis hook inject-workflow-state    Print workflow-state prompt
+trellis hook session-start            Print session start context
+trellis hook record-session           Record a session in the journal
+trellis hook list-sessions            List recorded sessions
+```
+
+### Maintenance
+
+```bash
+trellis update              Sync templates and configuration
+trellis upgrade             Upgrade to the latest version
+trellis uninstall           Remove Trellis (use --keep-tasks to preserve)
+trellis version             Show version
 ```
 
 ## Workflow
@@ -246,13 +315,22 @@ The project includes comprehensive test coverage:
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
 
-Please ensure all tests pass and follow the existing code style.
+- Development environment setup
+- Code style and conventions
+- Pull request process
+- Issue templates
+- Testing standards
+
+Quick start:
+
+```bash
+git clone git@github.com:superops-team/trellis-go.git
+cd trellis-go
+go test ./...
+go build ./cmd/trellis
+```
 
 ## License
 
