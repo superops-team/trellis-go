@@ -185,3 +185,135 @@ func TestReplace(t *testing.T) {
 		t.Errorf("expected 'new version', got %q", string(data))
 	}
 }
+
+func TestReplace_DownloadedNotFound(t *testing.T) {
+	c := &Checker{}
+	err := c.Replace("/nonexistent/downloaded", "/tmp/target")
+	if err == nil {
+		t.Fatal("expected error when downloaded file not found")
+	}
+}
+
+func TestCheckLatest_SpecificTag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/repos/test-owner/test-repo/releases/tags/v0.5.0") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(Release{
+			TagName: "v0.5.0",
+			Assets:  []Asset{{Name: "trellis_linux_amd64", DownloadURL: "http://example.com/trellis"}},
+		})
+	}))
+	defer server.Close()
+
+	c := newTestChecker(server)
+	release, err := c.CheckLatest("v0.5.0")
+	if err != nil {
+		t.Fatalf("CheckLatest(v0.5.0) error: %v", err)
+	}
+	if release.TagName != "v0.5.0" {
+		t.Errorf("expected v0.5.0, got %s", release.TagName)
+	}
+}
+
+func TestCheckLatest_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer server.Close()
+
+	c := newTestChecker(server)
+	_, err := c.CheckLatest("latest")
+	if err == nil {
+		t.Fatal("expected error for API 404")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error should contain 404, got: %v", err)
+	}
+}
+
+func TestCheckLatest_BetaNoPrerelease(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]Release{
+			{TagName: "v0.2.0", Prerelease: false},
+		})
+	}))
+	defer server.Close()
+
+	c := newTestChecker(server)
+	release, err := c.CheckLatest("beta")
+	if err != nil {
+		t.Fatalf("CheckLatest(beta) error: %v", err)
+	}
+	if release.TagName != "v0.2.0" {
+		t.Errorf("expected fallback to v0.2.0, got %s", release.TagName)
+	}
+}
+
+func TestCheckLatest_BetaEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]Release{})
+	}))
+	defer server.Close()
+
+	c := newTestChecker(server)
+	_, err := c.CheckLatest("beta")
+	if err == nil {
+		t.Fatal("expected error for empty releases")
+	}
+}
+
+func TestDownload_SizeMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("short"))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "downloaded")
+
+	c := &Checker{HTTPClient: server.Client()}
+	release := &Release{
+		TagName: "v0.2.0",
+		Assets: []Asset{
+			{
+				Name:        "trellis_" + runtime.GOOS + "_" + runtime.GOARCH,
+				DownloadURL: server.URL,
+				Size:        999999,
+			},
+		},
+	}
+
+	err := c.Download(release, dest)
+	if err == nil {
+		t.Fatal("expected error for size mismatch")
+	}
+	if !strings.Contains(err.Error(), "expected") {
+		t.Errorf("error should mention expected bytes, got: %v", err)
+	}
+}
+
+func TestFindAsset_Fallback(t *testing.T) {
+	c := &Checker{}
+	release := &Release{
+		Assets: []Asset{
+			{Name: "unrelated_file.zip"},
+		},
+	}
+	asset := c.findAsset(release)
+	if asset == nil {
+		t.Fatal("expected fallback to first asset")
+	}
+	if asset.Name != "unrelated_file.zip" {
+		t.Errorf("expected fallback asset, got %s", asset.Name)
+	}
+}
+
+func TestHTTPClient_Default(t *testing.T) {
+	c := &Checker{}
+	client := c.httpClient()
+	if client == nil {
+		t.Fatal("expected non-nil default HTTP client")
+	}
+}

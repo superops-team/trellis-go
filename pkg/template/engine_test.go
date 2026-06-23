@@ -130,6 +130,92 @@ func TestRender_ReturnsHashWriteError(t *testing.T) {
 	}
 }
 
+func TestFuncMap(t *testing.T) {
+	ctx := RenderContext{
+		PlatformID:   "claude",
+		PlatformName: "Claude Code",
+		Developer:    "alice",
+		ProjectName:  "myproject",
+		ExecutorAI:   "claude",
+		AgentCapable: true,
+		HasHooks:     false,
+		CLIFlag:      "--flag",
+	}
+	fm := ctx.FuncMap()
+
+	// Verify all expected functions exist
+	keys := []string{"PlatformID", "PlatformName", "Developer", "ProjectName", "ExecutorAI", "AgentCapable", "HasHooks", "CLIFlag"}
+	for _, k := range keys {
+		if _, ok := fm[k]; !ok {
+			t.Errorf("FuncMap missing key: %s", k)
+		}
+	}
+
+	// Call each function to ensure coverage
+	if v, ok := fm["PlatformID"].(func() string); ok {
+		if v() != "claude" {
+			t.Errorf("PlatformID = %s, want claude", v())
+		}
+	}
+	if v, ok := fm["AgentCapable"].(func() bool); ok {
+		if !v() {
+			t.Error("AgentCapable should be true")
+		}
+	}
+	if v, ok := fm["HasHooks"].(func() bool); ok {
+		if v() {
+			t.Error("HasHooks should be false")
+		}
+	}
+}
+
+func TestToMap(t *testing.T) {
+	ctx := RenderContext{
+		PlatformID: "cursor",
+		Developer:  "bob",
+		Extra:      map[string]any{"CustomKey": "custom-value"},
+	}
+	m := ctx.ToMap()
+	if m["PlatformID"] != "cursor" {
+		t.Errorf("PlatformID = %v, want cursor", m["PlatformID"])
+	}
+	if m["Developer"] != "bob" {
+		t.Errorf("Developer = %v, want bob", m["Developer"])
+	}
+	if m["CustomKey"] != "custom-value" {
+		t.Errorf("CustomKey = %v, want custom-value", m["CustomKey"])
+	}
+}
+
+func TestHash(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "test.txt")
+	os.WriteFile(path, []byte("hello"), 0644)
+
+	eng := NewEngine(testFS, "testdata")
+	hash, err := eng.Hash(path)
+	if err != nil {
+		t.Fatalf("Hash failed: %v", err)
+	}
+	if hash == "" {
+		t.Error("expected non-empty hash")
+	}
+
+	// Same content => same hash
+	hash2, _ := eng.Hash(path)
+	if hash != hash2 {
+		t.Error("same file should have same hash")
+	}
+}
+
+func TestHash_NonExistent(t *testing.T) {
+	eng := NewEngine(testFS, "testdata")
+	_, err := eng.Hash(filepath.Join(t.TempDir(), "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
 func assertFileContent(t *testing.T, path, want string) {
 	t.Helper()
 	data, err := os.ReadFile(path)

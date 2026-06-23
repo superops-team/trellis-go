@@ -128,3 +128,95 @@ func TestFindFiles(t *testing.T) {
 		t.Errorf("expected 2 matches, got %d", len(matches))
 	}
 }
+
+func TestWriteFile_RenameError(t *testing.T) {
+	// Create a read-only directory to force rename failure
+	tmp := t.TempDir()
+	subdir := filepath.Join(tmp, "subdir")
+	if err := os.Mkdir(subdir, 0444); err != nil {
+		t.Fatalf("create subdir: %v", err)
+	}
+	defer os.Chmod(subdir, 0755)
+
+	path := filepath.Join(subdir, "test.txt")
+	err := WriteFile(path, []byte("data"), 0644)
+	if err == nil {
+		t.Fatal("expected error when rename fails")
+	}
+}
+
+func TestCopyDir_WithFilter(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(src, "b.md"), []byte("b"), 0644)
+
+	filter := func(path string) bool {
+		return filepath.Ext(path) == ".txt"
+	}
+	if err := CopyDir(src, dst, filter); err != nil {
+		t.Fatalf("CopyDir with filter failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "a.txt")); err != nil {
+		t.Error("a.txt should be copied")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "b.md")); err == nil {
+		t.Error("b.md should be filtered out")
+	}
+}
+
+func TestHashFile_NonExistent(t *testing.T) {
+	_, err := HashFile(filepath.Join(t.TempDir(), "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
+func TestHashDir_NonExistent(t *testing.T) {
+	_, err := HashDir(filepath.Join(t.TempDir(), "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for non-existent directory")
+	}
+}
+
+func TestIsBinary_NonExistent(t *testing.T) {
+	_, err := IsBinary(filepath.Join(t.TempDir(), "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
+func TestEnsureDir_Existing(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "existing")
+	os.MkdirAll(path, 0755)
+
+	// EnsureDir on existing directory should succeed
+	if err := EnsureDir(path); err != nil {
+		t.Fatalf("EnsureDir on existing dir failed: %v", err)
+	}
+}
+
+func TestFindFiles_NoMatch(t *testing.T) {
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("a"), 0644)
+
+	matches, err := FindFiles(tmp, []string{"*.md"})
+	if err != nil {
+		t.Fatalf("FindFiles failed: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(matches))
+	}
+}
+
+func TestFindFiles_InvalidPattern(t *testing.T) {
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("a"), 0644)
+
+	_, err := FindFiles(tmp, []string{"[invalid"})
+	if err == nil {
+		t.Fatal("expected error for invalid glob pattern")
+	}
+}

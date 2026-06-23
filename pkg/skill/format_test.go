@@ -107,6 +107,21 @@ func TestCodexAgentEntry(t *testing.T) {
 	}
 }
 
+func TestPlatformFormats_FilenameFnCalled(t *testing.T) {
+	// This test ensures the function literals in PlatformFormats are covered.
+	s := BrainstormSkill()
+	pfs := PlatformFormats()
+	for _, pf := range pfs {
+		fn := pf.FilenameFn(s)
+		if fn == "" {
+			t.Errorf("platform %s: FilenameFn returned empty string", pf.PlatformID)
+		}
+		if !strings.HasSuffix(fn, "/SKILL.md") {
+			t.Errorf("platform %s: expected SKILL.md suffix, got %q", pf.PlatformID, fn)
+		}
+	}
+}
+
 func TestAllFormatFunctionsProduceContent(t *testing.T) {
 	skills := AllSkills()
 	formatters := []struct {
