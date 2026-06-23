@@ -1,0 +1,21 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Trellis API",
+    "version": "0.3.0",
+    "description": "Trellis CLI API reference. Trellis is currently a CLI-only tool; this OpenAPI spec is a placeholder for a planned server mode.",
+    "contact": {
+      "name": "Trellis Team",
+      "url": "https://github.com/superops-team/trellis-go"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/superops-team/trellis-go/blob/main/LICENSE"
+    }
+  },
+  "paths": {},
+  "components": {
+    "schemas": {}
+  },
+  "tags": []
+}

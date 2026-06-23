@@ -76,6 +76,24 @@ func (r *Registry) ByClass(c Class) []Platform {
 	return out
 }
 
+// ForFlag looks up a platform by its CLIFlag or any of its aliases.
+// Returns the platform and true if found.
+func (r *Registry) ForFlag(flag string) (Platform, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, p := range r.platforms {
+		if p.CLIFlag == flag {
+			return p, true
+		}
+		for _, a := range p.Aliases {
+			if a == flag {
+				return p, true
+			}
+		}
+	}
+	return Platform{}, false
+}
+
 // IDs returns all platform IDs, sorted alphabetically.
 func (r *Registry) IDs() []string {
 	r.mu.RLock()

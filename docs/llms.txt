@@ -1,0 +1,14 @@
+# Trellis Documentation Index
+
+## Getting Started
+- [Home](../index.md) — Trellis overview and quick start
+- [Installation & First Task](../start/install-and-first-task.md) — Setup guide
+- [How Trellis Works](../start/how-it-works.md) — Core concepts
+- [Everyday Use](../start/everyday-use.md) — Daily workflow
+- [Real-World Scenarios](../start/real-world-scenarios.md) — Usage examples
+
+## Advanced
+- [Architecture](../advanced/architecture.md) — Package overview and design
+- [Configuration](../advanced/configuration.md) — Config file, env vars, CLI flags
+- [Multi-Platform](../advanced/multi-platform.md) — Working with multiple platforms
+- [Roadmap](../advanced/roadmap.md) — Current and future plans

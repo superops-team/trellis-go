@@ -149,6 +149,10 @@ func runInitFresh(paths resolvedPaths) error {
 		for _, id := range initOpts.platforms {
 			p, ok := registry.Get(id)
 			if !ok {
+				// Try flag/alias lookup (e.g. --windsurf → devin)
+				p, ok = registry.ForFlag("--" + id)
+			}
+			if !ok {
 				valid := strings.Join(registry.IDs(), ", ")
 				return fmt.Errorf("unknown platform %q; valid platforms: %s", id, valid)
 			}

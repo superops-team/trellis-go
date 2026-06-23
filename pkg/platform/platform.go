@@ -22,6 +22,7 @@ type Platform struct {
 	SupportsAgentSkills bool     `json:"supports_agent_skills"`
 	CLIFlag             string   `json:"cli_flag"`
 	Class               Class    `json:"class"`
+	Aliases             []string `json:"aliases,omitempty"`
 }
 
 // Validate checks the platform configuration for completeness and correctness.

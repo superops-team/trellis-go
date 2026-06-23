@@ -99,3 +99,72 @@ func TestRegistry_IDs(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistry_ZCode(t *testing.T) {
+	r := NewRegistry()
+	p, ok := r.Get("zcode")
+	if !ok {
+		t.Fatal("expected zcode platform to exist")
+	}
+	if p.ID != "zcode" {
+		t.Errorf("expected ID zcode, got %s", p.ID)
+	}
+	if p.ConfigDir != ".zcode" {
+		t.Errorf("expected ConfigDir .zcode, got %s", p.ConfigDir)
+	}
+	if p.Class != ClassPushBased {
+		t.Errorf("expected Class push, got %s", p.Class)
+	}
+	if p.CLIFlag != "--zcode" {
+		t.Errorf("expected CLIFlag --zcode, got %s", p.CLIFlag)
+	}
+}
+
+func TestRegistry_DevinRenamed(t *testing.T) {
+	r := NewRegistry()
+
+	// Devin should exist
+	p, ok := r.Get("devin")
+	if !ok {
+		t.Fatal("expected devin platform to exist")
+	}
+	if p.ConfigDir != ".devin" {
+		t.Errorf("expected ConfigDir .devin, got %s", p.ConfigDir)
+	}
+
+	// Windsurf should NOT exist
+	_, ok = r.Get("windsurf")
+	if ok {
+		t.Error("windsurf platform should not exist after rename to devin")
+	}
+}
+
+func TestRegistry_ForFlag_Alias(t *testing.T) {
+	r := NewRegistry()
+
+	// --devin should return devin
+	p, ok := r.ForFlag("--devin")
+	if !ok {
+		t.Fatal("expected --devin to resolve")
+	}
+	if p.ID != "devin" {
+		t.Errorf("expected devin, got %s", p.ID)
+	}
+
+	// --windsurf alias should also return devin
+	p, ok = r.ForFlag("--windsurf")
+	if !ok {
+		t.Fatal("expected --windsurf alias to resolve to devin")
+	}
+	if p.ID != "devin" {
+		t.Errorf("expected devin via --windsurf alias, got %s", p.ID)
+	}
+}
+
+func TestRegistry_ForFlag_NotFound(t *testing.T) {
+	r := NewRegistry()
+	_, ok := r.ForFlag("--nonexistent")
+	if ok {
+		t.Error("expected --nonexistent to not resolve")
+	}
+}

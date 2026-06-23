@@ -12,7 +12,7 @@ Use SDD + TDD for every slice: pick one scenario from `specs/*/spec.md`, write o
 - [x] 0.4 Add an unexported root-resolution helper in `cmd/trellis` returning repo root, Trellis dir, tasks dir, and spec dir.
 - [x] 0.5 Update `init`, `task create`, `task list`, and `uninstall` to use the helper.
 - [x] 0.6 Replace ignored `os.Getwd()` errors in task commands with explicit wrapped errors.
-- [ ] 0.7 Run `go test ./cmd/trellis` and `go test ./...`.
+- [x] 0.7 Run `go test ./cmd/trellis` and `go test ./...`.
 
 ## P1. Task CLI delegation
 
@@ -26,7 +26,7 @@ Use SDD + TDD for every slice: pick one scenario from `specs/*/spec.md`, write o
 - [x] 1.8 Implement `task archive <id>` through `pkg/task.Manager.Archive`.
 - [x] 1.9 Make archive metadata update ordering safe: save completed metadata before move or perform a temp-write/rollback-safe equivalent.
 - [x] 1.10 Keep `task current` out of scope except for stable no-active-task output.
-- [ ] 1.11 Run `go test ./cmd/trellis ./pkg/task` and `go test ./...`.
+- [x] 1.11 Run `go test ./cmd/trellis ./pkg/task` and `go test ./...`.
 
 ## P2. Manifest and context behavior
 
@@ -39,7 +39,7 @@ Use SDD + TDD for every slice: pick one scenario from `specs/*/spec.md`, write o
 - [x] 2.7 Add failing CLI tests for `trellis context build --task <id> --phase implement|check` and `--phase research`.
 - [x] 2.8 Implement `context build` through `pkg/context.Builder`.
 - [x] 2.9 Convert silent required-data failures into actionable errors; optional entries may still be skipped.
-- [ ] 2.10 Run `go test ./cmd/trellis ./pkg/manifest ./pkg/context ./pkg/task` and `go test ./...`.
+- [x] 2.10 Run `go test ./cmd/trellis ./pkg/manifest ./pkg/context ./pkg/task` and `go test ./...`.
 
 ## P2b. Template and spec-loader cleanup
 
@@ -70,8 +70,8 @@ Use SDD + TDD for every slice: pick one scenario from `specs/*/spec.md`, write o
 
 ## Recommended schedule
 
-- [ ] Day 1: P0, hermetic E2E harness and root-resolution tests.
-- [ ] Day 2: P1, task create/list/start/archive delegation and task archive consistency.
-- [ ] Day 3: P2 manifest/context CLI if P1 is green; otherwise split context into a follow-up PR.
-- [ ] Day 4: P2b template/spec-loader tests and cleanup.
-- [ ] Day 5: P3 docs/module identity decision, full regression, and manual smoke test.
+- [x] Day 1: P0, hermetic E2E harness and root-resolution tests.
+- [x] Day 2: P1, task create/list/start/archive delegation and task archive consistency.
+- [x] Day 3: P2 manifest/context CLI if P1 is green; otherwise split context into a follow-up PR.
+- [x] Day 4: P2b template/spec-loader tests and cleanup.
+- [x] Day 5: P3 docs/module identity decision, full regression, and manual smoke test.
